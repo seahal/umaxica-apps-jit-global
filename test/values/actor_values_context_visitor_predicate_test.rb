@@ -3,11 +3,9 @@
 require "test_helper"
 
 class ActorValuesContextVisitorPredicateTest < ActiveSupport::TestCase
-  test "visitor role predicate follows the explicit actor type" do
-    visitor = ActorValuesContext.empty.with(actor_type: :visitor)
-    client = ActorValuesContext.empty.with(actor_type: :client)
-
-    assert_predicate visitor, :visitor?
-    assert_not client.visitor?
+  test "retired visitor actor type is rejected while client and operator roles remain explicit" do
+    assert_raises(ArgumentError) { ActorValuesContext.empty.with(actor_type: :visitor) }
+    assert_predicate ActorValuesContext.empty.with(actor_type: :client), :client?
+    assert_predicate ActorValuesContext.empty.with(actor_type: :operator), :operator?
   end
 end

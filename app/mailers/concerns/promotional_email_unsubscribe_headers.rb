@@ -5,9 +5,7 @@ module PromotionalEmailUnsubscribeHeaders
   extend ActiveSupport::Concern
 
   # Promotional unsubscribe links point at base/www, which owns the preference and
-  # email-unsubscribe boundary (adr/identity-authority-boundary.md). The visitor (com)
-  # email preference page is retired with the corporate identity surface, so a visitor
-  # promotional unsubscribe is no longer a supported workflow.
+  # email-unsubscribe boundary (adr/identity-authority-boundary.md).
   SURFACE_OPTIONS = {
     client: {
       edit_route: :edit_base_app_preference_email_url,
@@ -34,11 +32,6 @@ module PromotionalEmailUnsubscribeHeaders
 
   def promotional_unsubscribe_url(email_record, route:)
     scope = email_record.promotional_unsubscribe_scope
-    if scope.to_sym == :visitor
-      raise ArgumentError,
-            "visitor promotional unsubscribe is retired with the Base com email preference surface"
-    end
-
     options = SURFACE_OPTIONS.fetch(scope)
     token = email_record.promotional_unsubscribe_token
 

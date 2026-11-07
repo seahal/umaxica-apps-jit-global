@@ -29,12 +29,25 @@ class OidcTokenRevoker < ApplicationService
     Result.new(success: true, error: nil, error_description: nil)
   end
 
+  # The API boundary's client rate limit runs after this same operation authenticates the request.
+  # Reusing the result keeps a private_key_jwt assertion one-use while allowing the controller to
+  # key the limiter on the authenticated client before calling the mutating path.
+  def authenticated_client_id
+    client_id if authenticated_client?
+  end
+
   private
 
   attr_reader :token, :client_id, :client_secret, :token_type_hint, :host, :expected_resource_type,
               :client_assertion_type, :client_assertion, :revocation_endpoint_uri
 
   def authenticated_client?
+    return @authenticated_client if defined?(@authenticated_client)
+
+    @authenticated_client = authenticate_client?
+  end
+
+  def authenticate_client?
     client = OidcClientRegistry.find(client_id)
     if expected_resource_type.present?
       return false unless client

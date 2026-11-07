@@ -102,7 +102,7 @@ module SignUpFlowTicket
     self.expires_at = [expires_at, binding.curfew_at].compact.min
   end
 
-  # APP/COM explicitly opt in at creation; ORG has no public sign-up admission.
+  # APP explicitly opts in at creation; ORG has no public sign-up admission.
   def sign_up_admission_is_redeemed
     binding = auth_admission_binding
     return unless binding

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Shared post-OTP progression for the four contact sign-up entry points
-# (app/com x email/telephone). Once the contact OTP is verified, the ticket
+# (app x email/telephone). Once the contact OTP is verified, the ticket
 # has to travel CONTACT_PENDING -> CONTACT_VERIFIED -> GUARDRAIL_PENDING ->
 # CHECKPOINT_PENDING and then clear the :otp requirement before any later
 # checkpoint step (passkey, passcode, birthdate) is reachable.
@@ -14,6 +14,57 @@ module SignUpContactOtpControllerSupport
   extend ActiveSupport::Concern
 
   private
+
+  def otp_resend_json_request? = request.format.json?
+
+  def valid_otp_resend_state?
+    state = params[:state]
+    binding = params[AuthIoKeys::Params::FLOW_BINDING]
+    state.is_a?(String) && binding.is_a?(String) && state == binding
+  end
+
+  def reject_invalid_otp_resend_state?
+    return false unless otp_resend_json_request? && !valid_otp_resend_state?
+
+    render_otp_resend_json(status: :bad_request, retry_after: 0)
+    true
+  end
+
+  def render_otp_resend_json(status:, retry_after:)
+    retry_after = [retry_after.ceil, 0].max
+    response.headers["Retry-After"] = retry_after.to_s if status == :too_many_requests
+    render json: { resendable: status == :ok, retry_after: retry_after }, status: status
+  end
+
+  def render_otp_resend_success
+    render_otp_resend_json(status: :ok, retry_after: 0)
+  end
+
+  def render_otp_resend_failure
+    render_otp_resend_json(status: :service_unavailable, retry_after: 0)
+  end
+
+  def render_otp_resend_issue_failure(result, cooldown_remaining:)
+    return render_otp_resend_failure unless result.status == :rate_limited
+
+    render_otp_resend_rate_limited(cooldown_remaining)
+  end
+
+  def render_otp_resend_rate_limited(cooldown_remaining)
+    render_otp_resend_json(status: :too_many_requests, retry_after: [cooldown_remaining.ceil, 1].max)
+  end
+
+  def render_otp_issue_failure(result)
+    if otp_resend_json_request?
+      render_otp_resend_issue_failure(result, cooldown_remaining: otp_resend_cooldown_remaining_for_json)
+    else
+      render_otp_ceremony_result(result)
+    end
+  end
+
+  def otp_resend_cooldown_remaining_for_json
+    raise NotImplementedError, "OTP resend cooldown must be owned by the channel controller"
+  end
 
   # Returns a SignUpResult. The caller owns the response: on success it should
   # finalize when `next_event == :finalize`, otherwise continue to its own next

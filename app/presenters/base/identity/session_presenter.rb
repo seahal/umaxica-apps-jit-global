@@ -9,6 +9,9 @@ module Base
       public
 
       def present(session, current:, surface:)
+        surface = surface.to_s.to_sym
+        raise ArgumentError, "unsupported identity session surface" unless %i(app org).include?(surface)
+
         status_key = "base.shared.identity.sessions.#{current ? "current_session" : "active"}"
         attributes = {
           device: I18n.t("base.shared.identity.sessions.unknown_device"),
@@ -17,7 +20,7 @@ module Base
           expires_at: localized_session_timestamp(session.discard_at),
           status: I18n.t(status_key),
         }
-        attributes[:mode] = emergency_mode(session) if surface.to_sym == :org
+        attributes[:mode] = emergency_mode(session) if surface == :org
         attributes
       end
 

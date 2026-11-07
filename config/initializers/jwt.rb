@@ -15,10 +15,8 @@ if Rails.env.local?
   # Development and test defaults remain resource-specific so local execution
   # exercises the same audience isolation required in production.
   ENV["AUTH_JWT_CLIENT_AUDIENCES"] ||= "umaxica-api-client"
-  ENV["AUTH_JWT_VISITOR_AUDIENCES"] ||= "umaxica-api-visitor"
   ENV["AUTH_JWT_OPERATOR_AUDIENCES"] ||= "umaxica-api-operator"
   ENV["AUTH_JWT_CLIENT_CLIENT_ID"] ||= "umaxica-web-client"
-  ENV["AUTH_JWT_VISITOR_CLIENT_ID"] ||= "umaxica-web-visitor"
   ENV["AUTH_JWT_OPERATOR_CLIENT_ID"] ||= "umaxica-web-operator"
 end
 

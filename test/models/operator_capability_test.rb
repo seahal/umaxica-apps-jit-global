@@ -45,8 +45,13 @@ class OperatorCapabilityTest < ActiveSupport::TestCase
     )
 
     assert @operator.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP)
-    assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM)
     assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP)
+  end
+
+  test "retired com support capabilities fail closed as unknown identifiers" do
+    ["support.account.read.com", "support.session.revoke.com"].each do |capability|
+      assert_raises(ArgumentError, capability) { @operator.capability?(capability) }
+    end
   end
 
   test "an expired, not-yet-started, or revoked grant confers nothing" do
@@ -63,15 +68,6 @@ class OperatorCapabilityTest < ActiveSupport::TestCase
       operator: @operator,
       granted_by_operator: @granter,
       origin: "grant",
-      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM,
-      reason_code: "duty_assignment",
-      starts_at: 1.day.from_now,
-      expires_at: 2.days.from_now,
-    )
-    OperatorCapabilityGrant.create!(
-      operator: @operator,
-      granted_by_operator: @granter,
-      origin: "grant",
       capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ,
       reason_code: "duty_assignment",
       starts_at: 1.minute.ago,
@@ -82,7 +78,6 @@ class OperatorCapabilityTest < ActiveSupport::TestCase
     )
 
     assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP)
-    assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM)
     assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_CONSOLE_READ)
   end
 

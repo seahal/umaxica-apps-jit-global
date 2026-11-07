@@ -7,4 +7,5 @@
 # adr/global-regional-database-ownership.md; the future Regional repository never owns it.
 class AppRpRecord < AppZenithRecord
   self.abstract_class = true
+  self.strict_loading_by_default = true
 end

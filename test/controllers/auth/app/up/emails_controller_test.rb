@@ -993,12 +993,13 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     get birthdate_uri.request_uri, headers: default_headers
 
     assert_response :success
-    assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-      patch birthdate_uri.request_uri,
-            params: {
-              requirement: "birthdate", birthdate: "1990-01-15", checkpoint_version: flow.reload.checkpoint_version,
-            }, headers: default_headers
-    end
+    patch birthdate_uri.request_uri,
+          params: {
+            requirement: "birthdate", birthdate: "1990-01-15", checkpoint_version: flow.reload.checkpoint_version,
+          }, headers: default_headers
+
+    assert_response :unprocessable_content
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body.strip
 
     assert_equal candidate_facts, candidate.reload.attributes
     assert_equal candidate_owner_facts, candidate_owner.reload.attributes
@@ -1115,7 +1116,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: default_headers
 
     assert_response :unprocessable_content
-    assert_includes @response.body, "正しくありません"
+    assert_includes @response.body, I18n.t("sign.app.registration.email.update.invalid_code")
   end
 
   test "update with blank code returns 422 and renders edit" do
@@ -2632,8 +2633,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

@@ -142,9 +142,9 @@ class EmailSignUpOtpIssuer
       if email.binding_finalized_at || email.binding_released? || !email.accessible?(now)
         return refused(:inactive_candidate)
       end
-      return refused(:registered_destination) if registered_destination
-      return refused(:locked) if email.locked?(now: now)
-      return refused(:rate_limited) if email.otp_cooldown_active?(now: now)
+
+      refusal = otp_issue_refusal(email, registered_destination:, now:)
+      return refusal if refusal
 
       session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
       binding = {
@@ -163,6 +163,13 @@ class EmailSignUpOtpIssuer
 
       code = transaction.issue_email_otp!(purpose: "sign_up")
       EmailSignUpOtpIssueResult.new(status: :issued, transaction: transaction, code: code)
+    end
+
+    def otp_issue_refusal(email, registered_destination:, now:)
+      return refused(:locked) if email.locked?(now: now)
+      return refused(:rate_limited) if email.otp_cooldown_active?(now: now)
+
+      refused(:registered_destination) if registered_destination
     end
 
     def bound_to_candidate?(transaction, email, flow)

@@ -117,7 +117,7 @@ class Base::Org::Iam::GrantPagesTest < ActionDispatch::IntegrationTest
     revoked.revoke!(by: @reader, reason_code: "duty_ended")
     pending = OperatorCapabilityGrant.create!(
       operator: @other, granted_by_operator: @reader, origin: "grant",
-      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM, reason_code: "duty_assignment",
+      capability: OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP, reason_code: "duty_assignment",
       starts_at: 1.hour.from_now, expires_at: 1.day.from_now,
     )
     expired = OperatorCapabilityGrant.create!(

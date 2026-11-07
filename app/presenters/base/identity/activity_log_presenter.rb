@@ -74,8 +74,8 @@ module Base
       public
 
       def initialize(surface:)
-        @surface = surface.to_sym
-        raise ArgumentError, "unsupported identity activity surface" unless %i(app com org).include?(@surface)
+        @surface = surface.to_s.to_sym
+        raise ArgumentError, "unsupported identity activity surface" unless %i(app org).include?(@surface)
       end
 
       def visible_event_ids

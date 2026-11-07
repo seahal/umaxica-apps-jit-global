@@ -40,7 +40,7 @@ surface-specific. These are durable requirements, not current verification resul
   root's authentication context. Org Emergency Access follows ordinary policy rules and never gains
   Step-Up through a continuation. OIDC Access authentication requires an explicit known string
   `authn_ctx` matching the current bound root; absent, malformed and mismatched claims refuse.
-  Canonical SQL NULL on an org root means Normal; it is not an absent Access claim. App/com remain
+  Canonical SQL NULL on an org root means Normal; it is not an absent Access claim. App remains
   Normal-only. Preserve the independent Refresh authority, replay protection, root lifetime and
   root-login cooldown when correcting rejected credentials. See
   [Org authentication context](../security/org-emergency-access.md#authentication-context-and-token-claims).
@@ -83,12 +83,12 @@ surface-specific. These are durable requirements, not current verification resul
   cold JWKS client reuse the fresh key fetched by the first request when the distributed window
   identifies that key as recently published (D-144).
 
-- AUTH-18: APP/COM/ORG Passkey lifecycle mutations and their audit outbox facts share the owning
+- AUTH-18: APP/ORG Passkey lifecycle mutations and their audit outbox facts share the owning
   principal transaction. Additional metadata cannot replace the authoritative surface, target UUID
   or actor reference. Delivery preserves nil system actors and business occurrence time after
   credential deletion; retry after Chronicle commit before acknowledgement creates no second event.
   See [Passkey lifecycle and audit](../security/passkey-lifecycle-and-audit.md).
-- AUTH-19: APP/COM/ORG sign-in and sign-up: a Base → Auth admission reference (`entry_ref`) or an
+- AUTH-19: APP/ORG sign-in and APP sign-up: a Base → Auth admission reference (`entry_ref`) or an
   Auth → Base result reference presented from any browser other than the one that started the flow
   never attaches a ceremony that Base confirms, never redeems the admission, never yields an
   authentication result Base accepts and never establishes a Root Session. Its worst effect is
@@ -100,7 +100,7 @@ surface-specific. These are durable requirements, not current verification resul
   returns 409 without changing either attempt or issuing authentication cookies or DBSC headers. See
   [Base/Auth authority](../../adr/base-auth-ceremony-and-seven-rp-boundary.md).
 
-- AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
+- AUTH-20: APP email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
   `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty, unchecked
   and unsupported consent values refuse before creating registration or OTP artifacts.
 - AUTH-21: APP sign-up entry is fail-closed (D-177). A second entry submit while the browser's
@@ -119,16 +119,16 @@ surface-specific. These are durable requirements, not current verification resul
   outage degradation still refuses missing/empty tokens, failed challenges and missing secrets; only
   explicitly upstream-unavailable results may pass under the incident flag. See
   [Turnstile](../security/turnstile.md).
-- AUTH-23: APP/COM email sign-in resend requires confirmed admission, original browser/surface
+- AUTH-23: APP email sign-in resend requires confirmed admission, original browser/surface
   binding and an unexpired authenticated state. Cross-browser, expired and retargeted states cannot
   dispatch; destination cooldown and verification budgets remain effective. This bound continuation
   needs no fresh CAPTCHA. See
   [resend exception](../security/turnstile.md#email-sign-in-resend-exception).
-- AUTH-24: APP/COM unbound email candidates cannot select an actor or receive login/recovery OTP,
+- AUTH-24: APP unbound email candidates cannot select an actor or receive login/recovery OTP,
   even if their email status says VERIFIED. Rejected attempts preserve the candidate and issue no
   login credentials. See
   [binding contract](../security/identity-resolution-and-credential-binding.md).
-- AUTH-25: APP/COM security-lock recovery requires the existing verified effective email OTP proof
+- AUTH-25: APP security-lock recovery requires the existing verified effective email OTP proof
   and an eligible account lock. Recovery authority is scoped to lock recovery and does not itself
   issue a login session or reset a password. See
   [recovery scope](../security/credential-gateway.md#current-security-lock-recovery-scope).
@@ -146,13 +146,13 @@ surface-specific. These are durable requirements, not current verification resul
   requests. Challenge cookies use fixed-length selected-Operator binding or a non-authenticating
   sentinel. Missing, disabled, wrong-owner and invalid-signature Passkey assertions share the
   generic credential refusal and verification response floor.
-- AUTH-29: APP/COM withdrawal and security-lock recovery keep real/dummy session payload lengths
+- AUTH-29: APP withdrawal and security-lock recovery keep real/dummy session payload lengths
   equal, cover complete OTP issuance with the response floor, and never authenticate dummy state.
 - AUTH-30: Closed Org invitation provisioning refuses every invitation state before code lookup,
   preserves existing records and retains the common surface rate limit. See
   [nondisclosure decisions](../../adr/credential-response-nondisclosure.md).
 
-- AUTH-31: APP/COM/ORG authorization-code coordination preserves the request validator's protocol
+- AUTH-31: APP/ORG authorization-code coordination preserves the request validator's protocol
   error classification: an unsupported response type is `unsupported_response_type`, an inactive
   resource is `access_denied`, and a disallowed scope is `invalid_scope`. Refused requests return no
   success redirect; missing required parameters remain `invalid_request`. See
@@ -168,13 +168,13 @@ surface-specific. These are durable requirements, not current verification resul
   [identity binding](../../adr/identity-resolution-and-credential-binding.md) and
   [enforcement](../../adr/unified-enforcement.md).
 
-- AUTH-33: Visa APP/COM/ORG authorization and result/cancellation/switch endpoints share only their
+- AUTH-33: Visa APP/ORG authorization and result/cancellation/switch endpoints share only their
   realm-local protocol base. The base denies access by default; continuation endpoints expose only
   their navigation action and retain request-size, rate-limit and browser-binding protections.
   Public Visa roots remain passive, with no preference or authentication cookie issuance. See
   [Visa OP boundary](../../adr/visa-op-host.md).
 
-- AUTH-34: Visa APP/COM/ORG `/oauth/authorize` rejects HEAD and any result/cancellation/switch
+- AUTH-34: Visa APP/ORG `/oauth/authorize` rejects HEAD and any result/cancellation/switch
   continuation parameter, including empty values, before allocating a transaction. Its result,
   cancellation, switch and silent-SSO display GETs validate and render a same-origin signed POST
   continuation without committing. The existing authorization POST rechecks the browser and
@@ -224,6 +224,14 @@ surface-specific. These are durable requirements, not current verification resul
   behavior. See
   [`acceptance_wu29_sign_entry_sentry_blocked_test.rb`](../../test/integration/acceptance_wu29_sign_entry_sentry_blocked_test.rb)
   and [`admission_curfew_test.rb`](../../test/integration/admission_curfew_test.rb).
+- AUTH-42: Base app/org, Palm app and Warp app/org roots render for signed-out visitors and refuse a
+  valid signed-in RP session with 403, no redirect and `private, no-store`; invalid or expired
+  sessions are treated as signed out. Their successful OIDC callbacks use their own Dashboard when
+  no validated `target_link_uri` is present, while a validated target wins. Core app/org keep their
+  root usable in both states and use `/` as their callback landing because they have no Rails
+  Dashboard and share screens with TanStack Start. Base and Palm signed-out Dashboard requests
+  redirect to `/sign` with the Dashboard target; Warp retains its 404. See
+  [Home and Dashboard boundary](../../adr/home-dashboard-authentication-boundary.md).
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

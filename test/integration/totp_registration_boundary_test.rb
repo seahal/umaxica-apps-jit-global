@@ -161,7 +161,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil props.fetch("qr_code_image")
     assert_no_difference("ClientTotpCredential.count") do
       post props.fetch("start").fetch("action"), params: { authenticity_token: csrf },
-                                                 headers: same_origin_headers(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf)
+                                                 headers: same_origin_headers(
+                                                   ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf,
+                                                 )
       follow_redirect!
     end
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
@@ -190,7 +192,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf },
-                                                         headers: same_origin_headers(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf)
+                                                         headers: same_origin_headers(
+                                                           ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf,
+                                                         )
 
     assert_response :see_other
     result = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
@@ -397,7 +401,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       get new_auth_app_settings_totp_path(ri: "jp")
     end
     post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf },
-                                                            headers: same_origin_headers(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf)
+                                                            headers: same_origin_headers(
+                                                              ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf,
+                                                            )
     child = ClientTotpCeremonyTransaction.find_by!(
       step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
     )
@@ -417,7 +423,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       assert_response :unprocessable_content
       assert_equal index + 1, record.reload.attempt_count
       post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf },
-                                                              headers: same_origin_headers(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf)
+                                                              headers: same_origin_headers(
+                                                                ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf,
+                                                              )
 
       assert_response :see_other
       get new_auth_app_settings_totp_path(ri: "jp")
@@ -439,7 +447,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
       ) do
         delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf },
-                                                                  headers: same_origin_headers(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf)
+                                                                  headers: same_origin_headers(
+                                                                    ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), csrf: csrf,
+                                                                  )
       end
     end
 

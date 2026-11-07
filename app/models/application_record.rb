@@ -3,6 +3,7 @@
 
 class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
+  self.strict_loading_by_default = true
 
   # Every domain gets its own dedicated abstract class with its own `connects_to`
   # (PublishingRecord, OpBaseAppRecord, ...); nothing does business logic through

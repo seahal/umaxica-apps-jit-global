@@ -221,23 +221,20 @@ module OidcClientRegistry
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     boot_signature =
       %i(
-        sign_service sign_staff sign_corporate
-        base_service base_staff base_corporate
-        visa_service visa_staff visa_corporate
-        warp_service warp_staff warp_corporate
-        core_service core_staff core_corporate
+        sign_service sign_staff
+        base_service base_staff
+        warp_service warp_staff
+        core_service core_staff
       ).map { |name| [name, hosts.public_send(name).to_s] }
     env_signature =
       %w(
-        PUBLIC_AUTH_SERVICE_URL PUBLIC_AUTH_STAFF_URL PUBLIC_AUTH_CORPORATE_URL
-        PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL PRIVATE_AUTH_CORPORATE_URL
-        BASE_SERVICE_URL BASE_STAFF_URL BASE_CORPORATE_URL
-        VISA_SERVICE_URL VISA_STAFF_URL VISA_CORPORATE_URL
-        PUBLIC_VISA_SERVICE_URL PUBLIC_VISA_STAFF_URL PUBLIC_VISA_CORPORATE_URL
-        PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL PUBLIC_WARP_CORPORATE_URL
+        PUBLIC_AUTH_SERVICE_URL PUBLIC_AUTH_STAFF_URL
+        PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL
+        BASE_SERVICE_URL BASE_STAFF_URL
+        PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL
         PUBLIC_EDIT_STAFF_URL
-        PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL PUBLIC_CORE_CORPORATE_URL
-        CORE_SERVICE_URL CORE_STAFF_URL CORE_CORPORATE_URL
+        PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL
+        CORE_SERVICE_URL CORE_STAFF_URL
       ).map { |name| [name, ENV.fetch(name, nil)] }
 
     (boot_signature + env_signature).freeze

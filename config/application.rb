@@ -199,6 +199,8 @@ module Jit
     # `Time#iso8601` emit a numeric offset instead, which the API contract does not allow.
     config.time_zone = "UTC"
     config.active_record.default_timezone = :utc
+    # Add application and request context to SQL comments in every environment.
+    config.active_record.query_log_tags_enabled = true
     config.active_record.schema_format = :sql
     config.active_record.strict_loading_by_default = true
     config.active_record.action_on_strict_loading_violation = :raise

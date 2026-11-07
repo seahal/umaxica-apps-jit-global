@@ -50,6 +50,7 @@ const { default: MfaChallengeChoice } = await import("@/features/auth/MfaChallen
 const { default: VerificationSetup } = await import("@/features/auth/VerificationSetup");
 const { default: SignInEmailNew } = await import("@/features/auth/SignInEmailNew");
 const { default: SignInEmailEdit } = await import("@/features/auth/SignInEmailEdit");
+const { default: OtpVerificationForm } = await import("@/features/auth/signup/OtpVerificationForm");
 const { default: SignInPasskeyNew } = await import("@/features/auth/SignInPasskeyNew");
 const { default: PasskeyIndex } = await import("@/features/auth/settings/PasskeyIndex");
 const { default: PasskeyShow } = await import("@/features/auth/settings/PasskeyShow");
@@ -286,6 +287,44 @@ describe("sign-in credential screens", () => {
 
     expect(markup).toContain("認証");
     expect(markup).toMatch(/<a href="\/sign\/in"[^>]*>もどる<\/a>/u);
+  });
+});
+
+describe("sign-up OTP screen", () => {
+  it("renders the shared resend control on the verification form", () => {
+    const markup = renderToStaticMarkup(
+      <OtpVerificationForm
+        title="確認コード入力"
+        description="コードを送りました。"
+        action="/sign/up/check/email/otp?fb=flow-binding"
+        scope="client_email"
+        code_label="確認コード"
+        code_placeholder="123456"
+        submit_label="確認"
+        delivery_help="届かない場合"
+        error_heading={null}
+        errors={[]}
+        otp_resend={{
+          endpoint: "/sign/up/check/email/otp?fb=flow-binding",
+          state: "flow-binding",
+          messages: {
+            button_label: "再送信",
+            sent_message: "送信しました",
+            too_soon_message: "しばらく待ってください",
+            failed_message: "失敗しました",
+          },
+        }}
+        cancel={{
+          label: "キャンセル",
+          action: "/sign/up/check/email/otp?fb=flow-binding",
+          method: "delete",
+        }}
+      />,
+    );
+
+    expect(markup).toContain('name="client_email[pass_code]"');
+    expect(markup).toContain("再送信");
+    expect(markup).toContain("届かない場合");
   });
 });
 

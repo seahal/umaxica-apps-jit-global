@@ -145,8 +145,6 @@ module AuthenticationRedirects
       auth_app_sign_in_check_path(**attrs)
     elsif respond_to?(:auth_org_sign_in_check_path, true)
       auth_org_sign_in_check_path(**attrs)
-    elsif respond_to?(:auth_com_sign_in_check_path, true)
-      auth_com_sign_in_check_path(**attrs)
     else
       "/sign/in/check"
     end
@@ -167,18 +165,14 @@ module AuthenticationRedirects
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
         protocol: "https",
       )
-    when :com
-      base_com_welcome_url(
-        **attrs,
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-        protocol: "https",
-      )
     when :org
       base_org_welcome_url(
         **attrs,
         host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         protocol: "https",
       )
+    else
+      raise UnknownSignInSurfaceError, "#{self.class.name} has no sign-in welcome destination"
     end
   end
 
@@ -204,18 +198,14 @@ module AuthenticationRedirects
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
         protocol: "https",
       )
-    when :com
-      base_com_dashboard_url(
-        ri: params[:ri],
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-        protocol: "https",
-      )
     when :org
       base_org_dashboard_url(
         ri: params[:ri],
         host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         protocol: "https",
       )
+    else
+      raise UnknownSignInSurfaceError, "#{self.class.name} has no sign-in dashboard destination"
     end
   end
 
@@ -232,7 +222,6 @@ module AuthenticationRedirects
   def sign_in_surface
     case self.class.name
     when /\A(Auth|Sign|Acme|Base)::App::/ then :app
-    when /\A(Auth|Sign|Acme|Base)::Com::/ then :com
     when /\A(Auth|Sign|Acme|Base)::Org::/ then :org
     else
       raise UnknownSignInSurfaceError, "#{self.class.name} has no sign-in surface"

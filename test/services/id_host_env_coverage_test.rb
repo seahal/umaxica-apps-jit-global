@@ -7,7 +7,7 @@ require "test_helper"
 class IdHostEnvCoverageTest < ActiveSupport::TestCase
   test "JitIdHostEnv coverage" do
     with_env(
-      "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test", "AUTH_CORPORATE_URL" => "id.com.example.test",
+      "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test",
       "PRIVATE_AUTH_STAFF_URL" => "id.org.example.test",
     ) do
       assert_equal "id.app.example.test", JitIdHostEnv.service_url

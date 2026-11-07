@@ -29,7 +29,7 @@ class SignInSequenceCarrierTest < ActiveSupport::TestCase
     assert_nil session[SignInSequenceCarrier::KEY]
   end
 
-  test "does not expose another surface sequence as current" do
+  test "does not expose another supported surface sequence as current" do
     session = {}
     actor = ClientStub.new(42)
 
@@ -43,7 +43,26 @@ class SignInSequenceCarrierTest < ActiveSupport::TestCase
     )
 
     assert_predicate SignInSequenceCarrier.new(session, surface: :app).current, :present?
+    assert_not SignInSequenceCarrier.new(session, surface: :org).current.present?
+  end
+
+  test "retired com sequence state is not accepted or migrated" do
+    session = {
+      com_sign_in_sequence: {
+        "id" => SecureRandom.uuid,
+        "surface" => "com",
+        "actor_type" => ClientStub.name,
+        "actor_id" => 42,
+        "state" => "CHECKPOINT_PENDING",
+        "participant" => "checkpoint",
+        "expires_at" => 10.minutes.from_now.iso8601,
+      },
+    }
+
     assert_not SignInSequenceCarrier.new(session, surface: :com).current.present?
+    assert_not SignInSequenceCarrier.new(session, surface: :app).current.present?
+    assert_equal "com", session.fetch(:com_sign_in_sequence).fetch("surface")
+    assert_nil session[:app_sign_in_sequence]
   end
 
   test "terminal sequence is not valid for a participant" do
@@ -78,7 +97,7 @@ class SignInSequenceCarrierTest < ActiveSupport::TestCase
       },
     }
 
-    assert_not SignInSequenceCarrier.new(session, surface: :com).current.present?
+    assert_not SignInSequenceCarrier.new(session, surface: :org).current.present?
     assert_predicate SignInSequenceCarrier.new(session, surface: :app).current, :present?
     assert_nil session[SignInSequenceCarrier::KEY]
   end

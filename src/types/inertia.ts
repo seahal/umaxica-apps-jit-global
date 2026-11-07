@@ -64,7 +64,15 @@ export type SurfaceChrome = {
   /** Absent on the operational surfaces, which have no preference authority to link to. */
   cookie_controls: ChromeCookieControls | null;
   theme_controls: ChromeThemeControls | null;
+  /** Relying-party surfaces only: the visitor's sign-in state and where they can go from it. */
+  account_navigation: ChromeAccountNavigation | null;
   copyright: string;
+};
+
+export type ChromeAccountNavigation = {
+  label: string;
+  signed_in: boolean;
+  links: ChromeLink[];
 };
 
 /**

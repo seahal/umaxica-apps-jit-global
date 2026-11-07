@@ -311,6 +311,7 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
     with_forgery_protection do
       ENDPOINTS.each do |endpoint|
         host! endpoint.fetch(:host)
+        anonymous_cookie = "#{PreferenceCookieName.anonymous_jwt}=not-a-preference-token"
 
         patch endpoint.fetch(:theme), params: "theme=dark",
                                       headers: { "Accept" => "application/json",
@@ -323,7 +324,7 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
                                       headers: { "Accept" => "text/html",
                                                  "Content-Type" => "application/json",
                                                  "Sec-Fetch-Site" => "cross-site",
-                                                 "Cookie" => "#{PreferenceCookieName.anonymous_jwt}=not-a-preference-token", }
+                                                 "Cookie" => anonymous_cookie, }
 
         assert_response :not_acceptable, endpoint.fetch(:label)
       end

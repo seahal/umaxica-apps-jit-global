@@ -4,7 +4,7 @@
 # WebAuthn configuration boot check.
 #
 # Relying-party configuration is per surface and fully explicit:
-# - production injects WEBAUTHN_<APP|COM|ORG>_RP_ID / _ORIGIN via the
+# - production injects WEBAUTHN_<APP|ORG>_RP_ID / _ORIGIN via the
 #   deployment environment; a missing value aborts boot (KeyError). There is
 #   no request-derived, shared-key, or credentials fallback in production.
 # - non-production reads Rails encrypted credentials (webauthn.<surface>.*),

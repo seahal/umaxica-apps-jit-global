@@ -183,7 +183,7 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
       assert_equal ClientPreferenceStatus::RETIRED, account_preference.reload.status_id
       [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
        PreferenceCookieName.anonymous_experience,].each do |name|
-        assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, name
+        assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, "Missing cookie header for #{name}"
       end
       binding_header =
         cookie_headers.find do |header|
@@ -235,7 +235,7 @@ class BasePreferenceZenithIdentityTest < ActionDispatch::IntegrationTest
       assert_equal OperatorPreferenceStatus::RETIRED, account_preference.reload.status_id
       [PreferenceCookieName.anonymous_jwt, PreferenceIoKeys::Cookies::LANGUAGE,
        PreferenceCookieName.anonymous_experience,].each do |name|
-        assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, name
+        assert cookie_headers.any? { |header| header.start_with?("#{name}=") }, "Missing cookie header for #{name}"
       end
       binding_header =
         cookie_headers.find do |header|

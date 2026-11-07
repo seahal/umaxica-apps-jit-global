@@ -5,21 +5,21 @@
 This runbook manages ES384 signing keys for Jump redirect tokens.
 
 Jump RT keys are issuer-surface scoped. Do not reuse one private key or `kid` across issuer
-namespaces, neither across `app`, `com` and `org` nor across the `auth`, `base`, `core`, `warp` and
-`palm` issuer groups.
+namespaces or across the `auth`, `base`, `visa`, `core`, `warp` and `palm` issuer groups.
 
-Jump issuers are exactly these thirteen namespaces:
+Jump issuers are exactly these eleven namespaces:
 
-- `AUTH_APP`, `AUTH_COM`, `AUTH_ORG`
-- `BASE_APP`, `BASE_COM`, `BASE_ORG`
-- `CORE_APP`, `CORE_COM`, `CORE_ORG`
-- `WARP_APP`, `WARP_COM`, `WARP_ORG`
+- `AUTH_APP`, `AUTH_ORG`
+- `BASE_APP`, `BASE_ORG`
+- `VISA_APP`, `VISA_ORG`
+- `CORE_APP`, `CORE_ORG`
+- `WARP_APP`, `WARP_ORG`
 - `PALM_APP`
 
-The list is `JumpRtSurface::ISSUER_NAMESPACES` (`app/values/jump_rt_surface.rb`). `ACME_APP`,
-`ACME_COM` and `ACME_ORG` remain in the general `JitSecurityJwtRegistry::SURFACE_NAMESPACES`
-registry for other token families, but they are not Jump signing authorities and are not rotated by
-this runbook.
+The list is `JumpRtSurface::ISSUER_NAMESPACES` (`app/values/jump_rt_surface.rb`). The corporate
+authentication realm has no Jump issuer. `ACME_APP` and `ACME_ORG` remain in the general
+`JitSecurityJwtRegistry::SURFACE_NAMESPACES` registry for other token families, but they are not
+Jump signing authorities and are not rotated by this runbook.
 
 Issuer registration and permitted destinations are separate contracts. See
 [the directed handoff ADR](../../adr/jump-directed-rails-handoff-contract.md). Issuer identity is

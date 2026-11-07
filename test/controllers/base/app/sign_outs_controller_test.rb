@@ -87,6 +87,57 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
+  test "ZR-12 Base APP sign out reaches Visa revocation and stops only its registered grant" do
+    token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    authenticate_rp_cell_for_sign_out!(client_id: "base-app-ww", actor: @user, root_token: token)
+    sibling = OpAppGrant.create!(
+      authentication_epoch: 0, client_token: token, oidc_client_id: "warp-app-jp", oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.day.from_now,
+    )
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: { "Host" => @host })
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+    visa_browser = open_session
+    visa_browser.host!(visa_host)
+    visa_browser.https!
+    connection = Faraday.new
+    revocation_status = nil
+    revocation_body = nil
+
+    connection.stub(
+      :post,
+      lambda { |endpoint_uri, body|
+        revocation_body = body
+        visa_browser.post(
+          endpoint_uri.request_uri,
+          params: body,
+          headers: { "Host" => visa_host, "Sec-Fetch-Site" => nil },
+        )
+        revocation_status = visa_browser.response.status
+        Faraday::Response.new(status: revocation_status, body: visa_browser.response.body)
+      },
+    ) do
+      VisaSensitiveAdmissionClient.stub(
+        :new, VisaClientStub.new(VisaSensitiveAdmissionClient::Result.new(status: :ok)),
+      ) do
+        OutboundHttp::Connection.stub(:build, connection) do
+          post base_app_sign_out_url(host: @host, ri: "jp"), headers: {
+            "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+          }
+        end
+      end
+    end
+
+    assert_response :see_other
+    assert_equal 200, revocation_status
+    assert_equal @rp_cell_token_response.fetch(:refresh_token), revocation_body.fetch(:token)
+    assert_equal "base-app-ww", revocation_body.fetch(:client_id)
+    assert_equal OidcClientAssertionJwt::ASSERTION_TYPE, revocation_body.fetch(:client_assertion_type)
+    assert_predicate @rp_cell_op_grant.reload, :revoked?
+    assert_predicate sibling.reload, :active?
+    assert_predicate token.reload, :currently_usable?
+    assert_nil visa_browser.response.headers["Set-Cookie"]
+  end
+
   test "Visa cancellation failure preserves the RP session and its browser credentials" do
     token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp_cell_for_sign_out!(client_id: "base-app-ww", actor: @user, root_token: token)

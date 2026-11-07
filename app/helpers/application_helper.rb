@@ -73,7 +73,10 @@ module ApplicationHelper
 
   def edge_host
     surface = request.respond_to?(:host) ? CoreSurface.current(request) : CoreSurface::DEFAULT
-    env_key = EDGE_HOST_ENV_KEYS.fetch(surface, EDGE_HOST_ENV_KEYS.fetch(CoreSurface::DEFAULT))
+    env_key =
+      EDGE_HOST_ENV_KEYS.fetch(surface) do
+        raise ArgumentError, "no Edge host is configured for surface #{surface.inspect}"
+      end
 
     CoreHostNormalization.normalize(ENV.fetch(env_key.first))
   end

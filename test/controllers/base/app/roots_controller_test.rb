@@ -14,6 +14,16 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/roots/index", inertia_component
     assert_equal "Base App", inertia_props.fetch("heading")
+    assert_equal(
+      { "signed_in" => false,
+        "links" => [[I18n.t("layouts.shared.account_navigation.sign_up_or_in"), base_app_sign_show_path(ri: "jp")]], },
+      inertia_props.fetch("chrome").fetch("account_navigation").then do |navigation|
+        { "signed_in" => navigation.fetch("signed_in"),
+          "links" => navigation.fetch("links").map { |link|
+            link.values_at("label", "href")
+          }, }
+      end,
+    )
   end
 
   test "preserves an incoming request id through Rails request and response handling" do

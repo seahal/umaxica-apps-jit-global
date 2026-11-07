@@ -32,6 +32,7 @@ class Warp::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Warp Com", inertia_props.fetch("heading")
     assert_equal I18n.t("base.com.roots.message"), inertia_props.fetch("description")
     assert_nil inertia_props["sign_up"]
+    assert_nil inertia_props.fetch("chrome").fetch("account_navigation"), "the anonymous com surface has no sign-in"
     assert_equal(
       [[I18n.t("ui_presentation.navigation.preferences"),
         base_com_preference_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "http"),]],

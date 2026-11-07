@@ -4,8 +4,7 @@
 # adr/unified-enforcement.md, Authorization / Operator safety, and
 # adr/operator-capability-authorization.md. Shared across the realm-specific Case classes (set
 # explicitly via `with: EnforcementCasePolicy`). Every rule resolves the record's realm through a
-# fixed case on the Case class and checks that realm's own capability, so an app grant never
-# reaches a com Case and the reverse.
+# fixed case on the Case class and checks that realm's own capability.
 #
 # Org-realm Cases act on Operators. No capability for them is defined, so every rule denies them;
 # operator discipline is not derived from app/com administration.
@@ -24,28 +23,24 @@ class EnforcementCasePolicy < ApplicationPolicy
   def create?
     realm_capability?(
       app: OperatorCapabilityGrant::ENFORCEMENT_APPLY_APP,
-      com: OperatorCapabilityGrant::ENFORCEMENT_APPLY_COM,
     )
   end
 
   def approve?
     realm_capability?(
       app: OperatorCapabilityGrant::ENFORCEMENT_APPROVE_APP,
-      com: OperatorCapabilityGrant::ENFORCEMENT_APPROVE_COM,
     ) && record.applied_by_operator_public_id != user.public_id
   end
 
   def release?
     realm_capability?(
       app: OperatorCapabilityGrant::ENFORCEMENT_RELEASE_APP,
-      com: OperatorCapabilityGrant::ENFORCEMENT_RELEASE_COM,
     )
   end
 
   def review_appeal?
     realm_capability?(
       app: OperatorCapabilityGrant::ENFORCEMENT_REVIEW_APPEAL_APP,
-      com: OperatorCapabilityGrant::ENFORCEMENT_REVIEW_APPEAL_COM,
     )
   end
 
@@ -53,7 +48,7 @@ class EnforcementCasePolicy < ApplicationPolicy
 
   # Every mutation also requires the realm's read capability: the operator is shown the Case before
   # acting on it, and a mutation-only grant would act blind.
-  def realm_capability?(read: false, app: nil, com: nil)
+  def realm_capability?(read: false, app: nil)
     read_capability, mutation_capability =
       case record
       when ::AppEnforcementCase then [OperatorCapabilityGrant::ENFORCEMENT_READ_APP, app]

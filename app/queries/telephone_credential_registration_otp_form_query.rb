@@ -5,24 +5,32 @@ class TelephoneCredentialRegistrationOtpFormQuery
     public
 
     def call(actor:, token:, telephone:, transaction:, browser_nonce:)
-      return false unless actor && token && telephone && browser_nonce.is_a?(String) &&
-        browser_nonce.encoding.ascii_compatible? && browser_nonce.valid_encoding? &&
-        browser_nonce.match?(/\A[A-Za-z0-9_-]{43}\z/)
+      return false unless valid_request?(actor, token, telephone, browser_nonce)
 
-      if transaction.nil?
-        return false unless actor.is_a?(Client) && token.is_a?(ClientToken) && telephone.is_a?(ClientTelephone) &&
-          token.user_id == actor.id && telephone.user_id == actor.id && !telephone.binding_finalized_at &&
-          !telephone.binding_released?
-
-        now = ClientTelephoneCeremonyTransaction.database_now
-        device_session = token.device_session_record
-        return actor.login_allowed? && actor.accessible?(actor.class.database_now) &&
-            telephone.accessible?(telephone.class.database_now) && token.active_status?(now) &&
-            device_session&.usable? && device_session.current_refresh_token_id == token.id &&
-            AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: telephone, owner: actor)
-      end
+      return registered_destination_form?(actor, token, telephone) if transaction.nil?
 
       new(actor: actor, token: token, telephone: telephone, transaction: transaction, browser_nonce: browser_nonce).call
+    end
+
+    private
+
+    def valid_request?(actor, token, telephone, browser_nonce)
+      actor && token && telephone && browser_nonce.is_a?(String) &&
+        browser_nonce.encoding.ascii_compatible? && browser_nonce.valid_encoding? &&
+        browser_nonce.match?(/\A[A-Za-z0-9_-]{43}\z/)
+    end
+
+    def registered_destination_form?(actor, token, telephone)
+      return false unless actor.is_a?(Client) && token.is_a?(ClientToken) && telephone.is_a?(ClientTelephone) &&
+        token.user_id == actor.id && telephone.user_id == actor.id && !telephone.binding_finalized_at &&
+        !telephone.binding_released?
+
+      now = ClientTelephoneCeremonyTransaction.database_now
+      device_session = token.device_session_record
+      actor.login_allowed? && actor.accessible?(actor.class.database_now) &&
+        telephone.accessible?(telephone.class.database_now) && token.active_status?(now) &&
+        device_session&.usable? && device_session.current_refresh_token_id == token.id &&
+        AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: telephone, owner: actor)
     end
   end
 

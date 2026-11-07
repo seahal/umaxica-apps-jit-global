@@ -80,23 +80,36 @@ class VisaSensitiveAdmissionBrowserConfirmer
   end
 
   def validate_locked_authority!(device_session, now)
-    owner_matches =
-      case [actor, token, grant]
-      in [Client, ClientToken, OpAppGrant]
-        token.user_id == actor.id && grant.client_token_id == token.id && client_id == "base-app-ww"
-      in [Operator, OperatorToken, OpOrgGrant]
-        token.staff_id == actor.id && grant.operator_token_id == token.id && client_id == "base-org-ww"
-      else
-        false
-      end
+    owner_matches = owner_matches?
     expected_subject = OidcSubject.for(actor, resource_type: actor.is_a?(Client) ? "client" : "operator")
-    unless owner_matches && token.active_status?(now) && device_session.usable? &&
-        device_session.current_refresh_token_id == token.id && grant.device_session_id == device_session.id &&
-        grant.oidc_client_id == client_id && grant.active?(now) &&
-        exact?(payload["sub"], expected_subject) && exact?(payload["sid"], grant.public_id) &&
-        exact?(payload["client_id"], client_id)
+    unless owner_matches && live_token_session?(device_session, now) &&
+        live_grant_binding?(device_session, now) && payload_authority_matches?(expected_subject)
       raise InvalidAuthority
     end
+  end
+
+  def owner_matches?
+    case [actor, token, grant]
+    in [Client, ClientToken, OpAppGrant]
+      token.user_id == actor.id && grant.client_token_id == token.id && client_id == "base-app-ww"
+    in [Operator, OperatorToken, OpOrgGrant]
+      token.staff_id == actor.id && grant.operator_token_id == token.id && client_id == "base-org-ww"
+    else
+      false
+    end
+  end
+
+  def live_token_session?(device_session, now)
+    token.active_status?(now) && device_session.usable? && device_session.current_refresh_token_id == token.id
+  end
+
+  def live_grant_binding?(device_session, now)
+    grant.device_session_id == device_session.id && grant.oidc_client_id == client_id && grant.active?(now)
+  end
+
+  def payload_authority_matches?(expected_subject)
+    exact?(payload["sub"], expected_subject) && exact?(payload["sid"], grant.public_id) &&
+      exact?(payload["client_id"], client_id)
   end
 
   def find_admission!
@@ -116,33 +129,57 @@ class VisaSensitiveAdmissionBrowserConfirmer
     authorization = admission.oidc_authorization_transaction
     expected_actor_subject = OidcSubject.for(actor, resource_type: actor.is_a?(Client) ? "client" : "operator")
     binding.with_lock do
-      digest_matches = exact?(admission.browser_binding_digest, browser_digest) &&
-        exact?(admission.browser_binding_digest, binding.base_browser_digest)
+      raise InvalidAuthority unless admission_confirmation_valid?(
+        admission, binding, ticket, authorization, expected_actor_subject, now,
+      )
 
-      valid = admission.actor_subject == expected_actor_subject && admission.grant_sid == grant.public_id &&
-        admission.realm == (actor.is_a?(Client) ? "app" : "org") &&
-        admission.client_id == client_id && admission.rp_session_ref == rp_session_ref &&
-        admission.expires_at > now && admission.rp_session_expires_at > now &&
-        admission.expires_at <= admission.rp_session_expires_at && event_matches?(admission) &&
-        authorization.pending? && authorization.surface == admission.realm && authorization.client_id == client_id &&
-        !authorization.expired?(now:) && !authorization.login_challenge_expired?(now:) &&
-        ticket.actor_ref == actor.public_id && ticket.session_ref == token.public_id &&
-        %w(pending verified).include?(ticket.status) && !ticket.expired?(now:) &&
-        binding.step_up_ceremony_transaction_id == ticket.id && binding.base_token_id == token.id &&
-        binding.purpose == "credential_registration_handoff" && binding.attached? && binding.live?(now:) &&
-        binding.auth_ceremony_session_id.present? && auth_session_active?(binding, now:) && digest_matches
-      raise InvalidAuthority unless valid
-
-      if admission.status == "browser_confirmed"
-        binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-        return admission
-      end
-      raise InvalidAuthority unless admission.status == "issued"
-
-      binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
-      admission.update!(status: "browser_confirmed", updated_at: now)
-      admission
+      confirm_admission!(admission, binding, now)
     end
+  end
+
+  def admission_confirmation_valid?(admission, binding, ticket, authorization, expected_actor_subject, now)
+    digest_matches = exact?(admission.browser_binding_digest, browser_digest) &&
+      exact?(admission.browser_binding_digest, binding.base_browser_digest)
+
+    admission_identity_matches?(admission, expected_actor_subject, now) &&
+      authorization_current?(authorization, admission, now) &&
+      ticket_matches?(ticket, now) && binding_matches?(binding, ticket, now) && digest_matches
+  end
+
+  def admission_identity_matches?(admission, expected_actor_subject, now)
+    admission.actor_subject == expected_actor_subject && admission.grant_sid == grant.public_id &&
+      admission.realm == (actor.is_a?(Client) ? "app" : "org") &&
+      admission.client_id == client_id && admission.rp_session_ref == rp_session_ref &&
+      admission.expires_at > now && admission.rp_session_expires_at > now &&
+      admission.expires_at <= admission.rp_session_expires_at && event_matches?(admission)
+  end
+
+  def authorization_current?(authorization, admission, now)
+    authorization.pending? && authorization.surface == admission.realm && authorization.client_id == client_id &&
+      !authorization.expired?(now:) && !authorization.login_challenge_expired?(now:)
+  end
+
+  def ticket_matches?(ticket, now)
+    ticket.actor_ref == actor.public_id && ticket.session_ref == token.public_id &&
+      %w(pending verified).include?(ticket.status) && !ticket.expired?(now:)
+  end
+
+  def binding_matches?(binding, ticket, now)
+    binding.step_up_ceremony_transaction_id == ticket.id && binding.base_token_id == token.id &&
+      binding.purpose == "credential_registration_handoff" && binding.attached? && binding.live?(now:) &&
+      binding.auth_ceremony_session_id.present? && auth_session_active?(binding, now:)
+  end
+
+  def confirm_admission!(admission, binding, now)
+    if admission.status == "browser_confirmed"
+      binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+      return admission
+    end
+    raise InvalidAuthority unless admission.status == "issued"
+
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    admission.update!(status: "browser_confirmed", updated_at: now)
+    admission
   end
 
   def auth_session_active?(binding, now:)

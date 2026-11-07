@@ -34,6 +34,8 @@ module SignEmailRegistrable
     required_state = FLOW_REQUIREMENTS[action_name.to_sym]
     return unless required_state
 
+    session.delete(:user_email_otp_last_sent_at) if action_name.to_sym == :new
+
     current_state = email_flow_state
     if action_name.to_sym.in?([:new, :create]) && current_state != STATE_INIT
       reset_email_flow!
@@ -59,6 +61,7 @@ module SignEmailRegistrable
 
   def reset_email_flow!
     session[SESSION_KEY] = STATE_INIT
+    session.delete(:user_email_otp_last_sent_at)
   end
 
   def redirect_flow_violation

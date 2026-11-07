@@ -7,6 +7,8 @@ class ClientVisaSocialLinkAdmission < OpBaseAppRecord
 
   def self.connection_owner = OpBaseAppRecord
 
+  public_class_method :connection_owner
+
   belongs_to :oidc_authorization_transaction, class_name: "ClientOidcAuthorizationTransaction"
   belongs_to :social_ceremony_transaction, class_name: "ClientSocialCeremonyTransaction"
   belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction"

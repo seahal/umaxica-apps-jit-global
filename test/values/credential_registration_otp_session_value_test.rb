@@ -19,8 +19,13 @@ class CredentialRegistrationOtpSessionValueTest < ActiveSupport::TestCase
     assert_predicate binding, :frozen?
     assert_not_includes binding.dump, arguments.fetch(:browser_nonce)
     assert_not_includes binding.inspect, binding.browser_digest
-    [arguments.merge(surface: "com"), arguments.merge(surface: "org"),
-     arguments.merge(channel: :telephone), arguments.merge(transaction_ref: SecureRandom.uuid),
+    org_binding = CredentialRegistrationOtpSessionValue.for(**arguments.merge(surface: "org"))
+
+    assert_not_equal binding.browser_digest, org_binding.browser_digest
+
+    [arguments.merge(surface: "com"), arguments.merge(surface: "unknown"), arguments.merge(surface: nil),
+     arguments.merge(surface: ""), arguments.merge(channel: :telephone),
+     arguments.merge(transaction_ref: SecureRandom.uuid),
      arguments.merge(root_ref: "different-root"),
      arguments.merge(browser_nonce: SecureRandom.urlsafe_base64(32)),].each do |foreign|
       assert_not_equal binding.browser_digest, CredentialRegistrationOtpSessionValue.for(**foreign).browser_digest
@@ -56,7 +61,8 @@ class CredentialRegistrationOtpSessionValueTest < ActiveSupport::TestCase
     [nil, "", false, 0, nonce[0...-1], "#{nonce}x", "#{nonce}\0"].each do |bad|
       assert_raises(ArgumentError) { CredentialRegistrationOtpSessionValue.for(**arguments.merge(browser_nonce: bad)) }
     end
-    [arguments.merge(surface: "unknown"), arguments.merge(channel: :unknown),
+    [arguments.merge(surface: "unknown"), arguments.merge(surface: "com"), arguments.merge(surface: nil),
+     arguments.merge(surface: ""), arguments.merge(channel: :unknown),
      arguments.merge(transaction_ref: nil), arguments.merge(transaction_ref: ""),
      arguments.merge(transaction_ref: arguments.fetch(:transaction_ref)[0...-1]),
      arguments.merge(transaction_ref: "#{arguments.fetch(:transaction_ref)}x"),].each do |bad|

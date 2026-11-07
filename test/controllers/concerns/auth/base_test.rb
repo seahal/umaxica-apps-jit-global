@@ -556,7 +556,6 @@ module Auth
     test "JwtConfiguration.audiences requires distinct resource-specific env" do
       with_env(
         "AUTH_JWT_CLIENT_AUDIENCES" => "u1,u2",
-        "AUTH_JWT_VISITOR_AUDIENCES" => "v1",
         "AUTH_JWT_OPERATOR_AUDIENCES" => "o1",
       ) do
         assert_equal %w(u1 u2), AuthenticationJwtConfiguration.audiences("client")
@@ -573,7 +572,6 @@ module Auth
       end
       with_env(
         "AUTH_JWT_CLIENT_AUDIENCES" => "shared",
-        "AUTH_JWT_VISITOR_AUDIENCES" => "shared",
         "AUTH_JWT_OPERATOR_AUDIENCES" => "operator-only",
       ) do
         assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences("client") }

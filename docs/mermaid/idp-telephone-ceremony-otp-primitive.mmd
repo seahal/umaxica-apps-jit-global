@@ -12,12 +12,12 @@ stateDiagram-v2
     Cancelled --> [*]
     Expired --> [*]
     note right of Issued
-        Separate telephone policy on Client, Visitor and Operator ceremony models.
+        Separate telephone policy on Client and Operator ceremony models.
         Stored HMAC binds realm, channel, transaction, purpose, actor,
         session, operation, candidate, destination digest, generation and OTP deadline.
         Wrong binding/code never consumes.
         Transport and verification require finite parent and OTP deadlines.
-        Signup and APP/COM/ORG registration integrate independent destination and candidate budgets.
+        APP signup and APP/ORG registration integrate independent destination and candidate budgets.
         Shared legacy Source proof retirement remains incomplete.
     end note
     note right of Consumed

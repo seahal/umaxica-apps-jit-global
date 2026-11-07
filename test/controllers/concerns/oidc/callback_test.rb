@@ -98,6 +98,10 @@ class OidcCallbackTestController < ApplicationController
   end
 
   private
+
+  def oidc_rp_default_landing_path
+    "/rp-home"
+  end
 end
 
 # The RP `state` is an ES384 JWS (D-149); a test labels a pending entry and mints a `state` whose
@@ -178,11 +182,15 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
+          params: {
+            code: "abc",
+            state: signed_state("state", target: nil),
+            iss: OidcIssuer.for_resource_type("client"),
+          }
     end
 
     assert_response :redirect
-    assert_redirected_to "/after"
+    assert_redirected_to "/rp-home"
     public_id = cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
 
     assert_predicate public_id, :present?
@@ -1137,26 +1145,18 @@ class OidcCallbackTestController
       "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
       "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
       "JWT_ACME_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_ACME_COM_ACTIVE_KID" => "acme-com-test",
-      "JWT_ACME_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_CORE_APP_ACTIVE_KID" => "core-app-test",
       "JWT_CORE_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_CORE_ORG_ACTIVE_KID" => "core-org-test",
       "JWT_CORE_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_CORE_COM_ACTIVE_KID" => "core-com-test",
-      "JWT_CORE_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_BASE_APP_ACTIVE_KID" => "base-app-test",
       "JWT_BASE_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_BASE_ORG_ACTIVE_KID" => "base-org-test",
       "JWT_BASE_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_BASE_COM_ACTIVE_KID" => "base-com-test",
-      "JWT_BASE_COM_PRIVATE_KEY" => jump_rt_key,
     }.each do |key, value|
       @jump_rt_env_originals[key] = ENV[key] unless @jump_rt_env_originals.key?(key)
       ENV[key] = value
@@ -1396,8 +1396,7 @@ class OidcCallbackTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
@@ -1564,6 +1563,26 @@ class OidcCellLocalCallbackIdentityTest < ActionDispatch::IntegrationTest
       local_identity.issuer, local_identity.realm, local_identity.client_id, local_identity.subject,
     ]
     assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE], :present?
+    @transport.verify_stubbed_calls
+  end
+
+  test "Core app callback without a target lands on its root and keeps the signed-in root available" do
+    jti = OidcStateTestSupport.jti(@state)
+    @state = OidcStateJwt.issue(client_id: @rp_client.client_id, target_link_uri: nil, jti:).first
+
+    OutboundHttp::Connection.stub(:build, @connection) do
+      TestSupport::OutboundHttpGuard.allow do
+        get(core_app_oidc_callback_path, params: { code: "provider-code", state: @state, iss: @issuer })
+      end
+    end
+
+    assert_redirected_to "/"
+    assert_predicate cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE], :present?
+
+    get core_app_root_path(ri: "jp")
+
+    assert_response :success
+    assert_equal "core/app/roots/index", inertia_component
     @transport.verify_stubbed_calls
   end
 

@@ -6,7 +6,7 @@ CredentialRegistrationOtpSessionValue =
       public
 
       def for(surface:, channel:, transaction_ref:, root_ref:, browser_nonce:)
-        unless %w(app com org).include?(surface) && %i(email telephone).include?(channel)
+        unless %w(app org).include?(surface) && %i(email telephone).include?(channel)
           raise ArgumentError, "unsupported registration session realm or channel"
         end
         unless ascii_match?(

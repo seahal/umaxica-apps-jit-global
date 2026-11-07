@@ -923,7 +923,6 @@ ja:
     code: コード
     code_challenge: コードチャレンジ
     code_challenge_method: コードチャレンジ方式
-    com_enforcement_case_id: COM制限措置ID
     com_preference_languages: 言語設定
     com_preference_regions: 地域設定
     com_preference_themes: テーマ設定
@@ -2403,8 +2402,7 @@ ja:
       invalid_request: 無効なリクエストです。
       less_than: は%{count}より小さい値にしてください
       less_than_or_equal_to: は%{count}以下の値にしてください
-      login_cooldown_retry:
-        現在ログインできません。しばらく待ってから %{restart_url} でもう一度お試しください
+      login_cooldown_retry: 現在サインインできません。しばらく待ってから、もう一度サインインしてください。
       login_required: ログインが必要です
       model_invalid: "バリデーションに失敗しました: %{errors}"
       not_a_number: は数値で入力してください
@@ -2715,6 +2713,11 @@ ja:
     japanese: 日本語
   layouts:
     shared:
+      account_navigation:
+        base: BASE へ
+        label: アカウント
+        sign_out: サインアウト
+        sign_up_or_in: 新規登録 / サインイン
       footer_cookie_controls:
         accept_all: すべて許可
         close_button: 閉じる
@@ -3423,7 +3426,7 @@ ja:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
             failed: 登録処理に失敗しました。もう一度やり直してください。
-            invalid_code: 確認コードが正しくありません
+            invalid_code: 確認コードが異なります。もう一度入力してください。
             sign_in_required: 登録を続行できませんでした。ログインをお試しください。
             success: 登録が完了しました。
         new:
@@ -3475,7 +3478,7 @@ ja:
             attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
             code_required: 確認コードを入力してください。
             failed: 登録処理に失敗しました。もう一度やり直してください。
-            invalid_code: 確認コードが正しくありません。
+            invalid_code: 確認コードが異なります。もう一度入力してください。
             passkey_required: 電話番号が確認されました。パスキーを登録してください。
             sign_in_required: 登録を続行できませんでした。ログインをお試しください。
             success: 電話番号の確認が完了しました。
@@ -4358,7 +4361,7 @@ ja:
           format: 生年月日はYYYY-MM-DD形式で入力してください。
           not_before_today: 生年月日は本日より前の日付を入力してください。
       sign_out:
-        already_signed_out: すでにログアウトしています。
+        already_signed_out: ログアウトは完了しました
         button: ログアウトします
         cleanup_incomplete_description: ログアウトしました。このサービスのログイン情報の削除を完了できませんでしたが、次に利用したときに削除されます。
         completed_description: ログアウトしました。ほかのサービスのセッションは無効になっています。開いたままの画面は、次に通信したときにログインを求めます。

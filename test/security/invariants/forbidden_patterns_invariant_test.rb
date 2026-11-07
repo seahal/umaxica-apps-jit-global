@@ -238,7 +238,7 @@ module Security
         },
         "app/controllers/auth/app/ceremony_bindings_controller.rb" => {
           target: "ceremony_binding_confirmation_url",
-          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
+          reason: "Purpose routes authorization to Visa and Step-Up to Base; receivers verify nonce and confirmation.",
         },
         "app/controllers/auth/app/verification/cancellations_controller.rb" => {
           target: "base_app_verification_cancellation_url",
@@ -246,7 +246,7 @@ module Security
         },
         "app/controllers/auth/org/ceremony_bindings_controller.rb" => {
           target: "ceremony_binding_confirmation_url",
-          reason: "The purpose-checked dispatcher sends authorization bindings to Visa and Step-Up bindings to Base; both receivers verify the browser nonce and admission confirmation.",
+          reason: "Purpose routes authorization to Visa and Step-Up to Base; receivers verify nonce and confirmation.",
         },
         "app/controllers/auth/org/verification/cancellations_controller.rb" => {
           target: "base_org_verification_cancellation_url",

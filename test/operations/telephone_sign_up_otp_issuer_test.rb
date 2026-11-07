@@ -11,7 +11,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
   end
 
   %w(app).each do |surface|
-    test "#{surface} Telephone signup raises without consuming proof if its destination becomes registered" do
+    test "#{surface} Telephone signup refuses without consuming proof if its destination becomes registered" do
       owner = Client.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       )
@@ -38,11 +38,11 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       ticket_facts = issued.transaction.reload.attributes
       registered_facts = registered.reload.attributes
 
-      assert_raises(RuntimeError) do
-        TelephoneSignUpOtpVerificationCommitter.call(
-          flow: flow, telephone: telephone, session_nonce: nonce, code: issued.code,
-        )
-      end
+      result = TelephoneSignUpOtpVerificationCommitter.call(
+        flow: flow, telephone: telephone, session_nonce: nonce, code: issued.code,
+      )
+
+      assert_equal :invalid_code, result.status
 
       assert_equal flow_facts, flow.reload.attributes
       assert_equal telephone_facts, telephone.reload.attributes

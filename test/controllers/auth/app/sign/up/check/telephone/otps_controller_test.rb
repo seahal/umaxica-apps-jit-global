@@ -147,6 +147,129 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     assert_includes response.body, I18n.t("sign.app.registration.telephone.update.invalid_code")
   end
 
+  test "resend rotates the telephone code and registered destinations keep the same response" do
+    clear_enqueued_jobs
+    telephone = start_telephone_signup!("+12345678927")
+    cycle = current_sign_up_cycle
+    transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+    old_code = otp_code_for(telephone)
+    initial_generation = transaction.otp_generation
+
+    get auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
+
+    assert_response :success
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    resend = props.fetch("otp_resend")
+
+    assert_equal @flow_binding, resend.fetch("state")
+    assert_equal "/sign/up/check/telephone/otp", URI.parse(resend.fetch("endpoint")).path
+    initial_delivery_count = enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: default_headers
+
+    assert_response :too_many_requests
+    cooldown_retry_after = response.parsed_body.fetch("retry_after")
+
+    assert_operator cooldown_retry_after, :>, 0
+    assert_equal initial_delivery_count,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    resend_at = telephone.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+    travel_to(resend_at) do
+      ClientTelephone.stub(:database_now, resend_at) do
+        post resend.fetch("endpoint"),
+             params: { state: resend.fetch("state") }, as: :json, headers: default_headers
+      end
+    end
+
+    assert_response :success
+    assert_equal({ "resendable" => true, "retry_after" => 0 }, response.parsed_body)
+    assert_equal initial_delivery_count + 1,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    assert_not_equal initial_generation, transaction.reload.otp_generation
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
+          params: { client_telephone: { pass_code: old_code } }, headers: default_headers
+
+    assert_response :unprocessable_content
+    wrong_props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_equal [I18n.t("sign.app.registration.telephone.update.invalid_code")], wrong_props.fetch("errors")
+    assert_equal "auth/app/sign/up/telephones/edit", inertia_component
+    assert_equal "client_telephone", wrong_props.fetch("scope")
+    wrong_headers = response.headers.slice("Cache-Control", "Content-Type", "Vary")
+
+    competitor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+    )
+    registered = competitor.client_telephones.create!(
+      raw_number: telephone.number,
+      confirm_policy: true,
+      confirm_using_mfa: true,
+      user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      binding_finalized_at: ClientTelephone.database_now,
+    )
+    row_facts = [telephone.reload.attributes, cycle.reload.attributes,
+                 contact_owner_for_test(telephone).reload.attributes, competitor.reload.attributes,
+                 registered.reload.attributes,]
+    delivery_count_before_registered_code =
+      enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
+          params: { client_telephone: { pass_code: "123456" } }, headers: default_headers
+
+    assert_response :unprocessable_content
+    registered_props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_equal [I18n.t("sign.app.registration.telephone.update.invalid_code")], registered_props.fetch("errors")
+    assert_equal wrong_props.fetch("errors"), registered_props.fetch("errors")
+    assert_equal "auth/app/sign/up/telephones/edit", inertia_component
+    assert_equal "client_telephone", registered_props.fetch("scope")
+    assert_equal wrong_headers, response.headers.slice("Cache-Control", "Content-Type", "Vary")
+    assert_equal row_facts,
+                 [telephone.reload.attributes, cycle.reload.attributes,
+                  contact_owner_for_test(telephone).reload.attributes, competitor.reload.attributes,
+                  registered.reload.attributes,]
+    assert_equal delivery_count_before_registered_code,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: default_headers
+
+    assert_response :too_many_requests
+    assert_not response.parsed_body.fetch("resendable")
+    assert_operator response.parsed_body.fetch("retry_after"), :>, 0
+    assert_equal delivery_count_before_registered_code,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+  end
+
+  test "resending a telephone code rejects the old code and accepts the new code" do
+    telephone = start_telephone_signup!("+12345678928")
+    old_code = otp_code_for(telephone)
+
+    get auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
+
+    assert_response :success
+    resend = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("otp_resend")
+    resend_at = telephone.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+    ClientTelephone.stub(:database_now, resend_at) do
+      post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: default_headers
+    end
+
+    assert_response :success
+    new_code = otp_code_for(telephone)
+
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
+          params: { client_telephone: { pass_code: old_code } }, headers: default_headers
+
+    assert_response :unprocessable_content
+    assert_includes response.body, I18n.t("sign.app.registration.telephone.update.invalid_code")
+
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
+          params: { client_telephone: { pass_code: new_code } }, headers: default_headers
+
+    assert_response :redirect
+  end
+
   test "patch with repeated invalid otp attempts locks the flow" do
     user_telephone = start_telephone_signup!("+1234567894")
     cycle = current_sign_up_cycle
@@ -542,8 +665,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

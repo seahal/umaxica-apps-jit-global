@@ -11,10 +11,10 @@ makes none. Where a decision has no repository source other than the owner's ins
 | Item | Category | What remains |
 | --- | --- | --- |
 | Capability authorization (default deny, per-operation, no wildcard, no role/type derivation) | Ready | none |
-| Support account read (app, com) | Ready after deployment configuration | grant assignment |
-| Enforcement read (app, com) | Ready after deployment configuration | grant assignment |
-| Enforcement apply / approve / release / appeal review (app, com) | Blocked by implementation | OQ-AUD-001; grant assignment |
-| Support session revoke (app, com) | Blocked by implementation | OQ-AUD-001; grant assignment |
+| Support account read (app) | Ready after deployment configuration | grant assignment |
+| Enforcement read (app) | Ready after deployment configuration | grant assignment |
+| Enforcement apply / approve / release / appeal review (app) | Blocked by implementation | OQ-AUD-001; grant assignment |
+| Support session revoke (app) | Blocked by implementation | OQ-AUD-001; grant assignment |
 | IAM grant / revoke | Blocked by implementation | OQ-AUD-001; grant assignment |
 | Bootstrap task | Ready after deployment configuration | operator ids at deployment |
 | Chronicle compliance retention (OQ-AUD-004) | Ready | 365 days, decided 2026-09-26 |
@@ -64,10 +64,10 @@ Only environment values remain; the architecture is decided.
   | Group | Capabilities |
   | --- | --- |
   | IAM bootstrap authority | `iam.capability.read`, `iam.capability.grant`, `iam.capability.revoke` |
-  | Support read | `support.console.read`, `support.account.read.{app,com}` |
-  | Support mutation | `support.session.revoke.{app,com}` |
-  | Enforcement read | `enforcement.read.{app,com}` |
-  | Enforcement mutation | `enforcement.{apply,approve,release,review_appeal}.{app,com}` |
+  | Support read | `support.console.read`, `support.account.read.app` |
+  | Support mutation | `support.session.revoke.app` |
+  | Enforcement read | `enforcement.read.app` |
+  | Enforcement mutation | `enforcement.{apply,approve,release,review_appeal}.app` |
 
   Deployment input: which operator receives which group. Only the IAM group is issued by bootstrap;
   the rest are delegated in the console by a holder who has them.
@@ -92,10 +92,10 @@ catalog capability to a named operator with a ticket. Recommendation:
 
 | Who | Capabilities | How | Expiry |
 | --- | --- | --- | --- |
-| Two IAM administrators (A, B) | IAM group; Support read; Support mutation; Enforcement read | bootstrap | 90 days, renewed after access review |
-| Support staff | Support read, and Support mutation only if they revoke sessions | console grant by A or B | 90 days |
+| Two IAM administrators (A, B) | IAM group; `support.account.read.app`; `support.session.revoke.app`; `enforcement.read.app` | bootstrap | 90 days, renewed after access review |
+| Support staff | `support.account.read.app`, and `support.session.revoke.app` only if they revoke sessions | console grant by A or B | 90 days |
 | Enforcement staff | none at launch | — | — |
-| When an enforcement procedure is staffed: an opener/releaser and a different approver/reviewer | opener: `enforcement.read.*`, `enforcement.apply.*`, `enforcement.release.*`; approver: `enforcement.read.*`, `enforcement.approve.*`, `enforcement.review_appeal.*` | bootstrap, one ticket per person | 90 days |
+| When an enforcement procedure is staffed: an opener/releaser and a different approver/reviewer | opener: `enforcement.read.app`, `enforcement.apply.app`, `enforcement.release.app`; approver: `enforcement.read.app`, `enforcement.approve.app`, `enforcement.review_appeal.app` | bootstrap, one ticket per person | 90 days |
 
 This keeps disciplinary capabilities off the IAM administrators and splits opening from approval
 across two people, matching four-eyes. The 90-day expiry is a recommendation for review cadence; the
@@ -131,13 +131,13 @@ system maximum is 366 days.
 | Operation | Route | Policy | UI | Reason | Depends on |
 | --- | --- | --- | --- | --- | --- |
 | Membership create/update/destroy | not routed on org | change rules deny org records | none | two ownership representations (`BureauOwnership`/`BureauAdministrationGrant` and membership `OWNER`); no Accepted decision names the authority | ownership source of truth |
-| Org-realm Enforcement | routed | every rule denies (no capability) | none linked | operator discipline must not derive from app/com support authority; no Accepted operator-to-operator matrix | operator-to-operator authorization matrix |
+| Org-realm Enforcement | routed | every rule denies (no capability) | none linked | operator discipline must not derive from Client support authority; no Accepted operator-to-operator matrix | operator-to-operator authorization matrix |
 | Operator lifecycle (join, suspend, terminate, restore) | not routed | every rule denies | none | responsibility decided (Rails org control plane owns it; no signup/JIT creation of operators; passkey Step-Up for high-risk transitions; Emergency may not act), but who may act on which operator is not decided | authorization matrix |
-| Operator session revocation | not routed | — | none | outside app/com support authority | authorization matrix |
+| Operator session revocation | not routed | — | none | outside Client support authority | authorization matrix |
 | Billing / configuration / system consoles | routed | `OrgConsolePolicy` denies | not linked | no authoritative data source | data source |
 
 Existing code for an operation (for example the lifecycle services) does not make it a provided
-feature. None of these needs to be resolved to run the app/com control plane. No repository source
+feature. None of these needs to be resolved to run the app control plane. No repository source
 assigns dates or owners to them.
 
 ## Environment / unrelated

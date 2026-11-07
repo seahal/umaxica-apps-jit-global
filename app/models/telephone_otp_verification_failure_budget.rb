@@ -36,7 +36,7 @@ class TelephoneOtpVerificationFailureBudget
   end
 
   def verify!(surface:, purpose:, channel:, destination_digest:, valid:)
-    raise ArgumentError, "unsupported OTP surface" unless %i(app com org).include?(surface)
+    raise ArgumentError, "unsupported OTP surface" unless %i(app org).include?(surface)
     unless %i(sign_up authentication credential_registration enforcement_recovery withdrawal_reentry).include?(purpose)
       raise ArgumentError, "unsupported OTP purpose"
     end

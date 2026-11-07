@@ -122,7 +122,8 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
     ].each do |cleanup|
       flow.update_columns(cleanup.merge(status_id: ClientSignUpFlowStatus::CANCELLED))
 
-      assert locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony), cleanup.inspect
+      assert locator.unreleased_attempt?(admission_binding: binding, ceremony_session: ceremony),
+             "Cleanup state #{cleanup.inspect} must retain the unreleased attempt"
     end
   end
 

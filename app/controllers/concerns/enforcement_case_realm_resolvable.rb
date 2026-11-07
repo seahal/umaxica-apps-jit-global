@@ -3,7 +3,7 @@
 
 # adr/unified-enforcement.md, Realm isolation / Approval: resolves the
 # Enforcement Case model class for the realm segment in the route
-# (/support/{app,com,org}/enforcement_cases). A realm-scoped route can only
+# (/support/{app,org}/enforcement_cases). A realm-scoped route can only
 # ever resolve to that realm's own Case class -- there is no code path by
 # which an app-scoped request can reach org data.
 module EnforcementCaseRealmResolvable

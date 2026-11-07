@@ -486,7 +486,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
           ceremony_ids.uniq!
           loop do
             previous_digests = ClientAuthCeremonySession.where(id: ceremony_ids).pluck(:previous_sid_digest).compact
-            previous_ids = ClientAuthCeremonySession.where(sid_digest: previous_digests).where.not(id: ceremony_ids).pluck(:id)
+            previous_ids = ClientAuthCeremonySession.where(sid_digest: previous_digests)
+              .where.not(id: ceremony_ids).pluck(:id)
             break if previous_ids.empty?
 
             ceremony_ids.concat(previous_ids)

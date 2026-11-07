@@ -35,7 +35,6 @@ Application code may read the resolved immutable request context through `Actor`
 - `Actor.whoami`
 - `Actor.client`
 - `Actor.operator`
-- `Actor.visitor`
 - `Actor.tld`
 - `Actor.preferences`
 - `Actor.authn`
@@ -81,7 +80,7 @@ clearing effect, but application code should prefer the domain-facing `clear` na
 The resolved context includes:
 
 - authenticated actor or `Unauthenticated.instance`
-- actor type (`:client`, `:operator`, `:visitor`, or `:unauthenticated`)
+- actor type (`:client`, `:operator`, or `:unauthenticated`)
 - `Actor.tld` from `HostContextResolver`
 - `Actor.authn.login_public_id`
 - typed authentication state derived from access-token claims
@@ -93,13 +92,13 @@ The resolved context includes:
 
 ## Surface Actors
 
-The three user-facing surfaces use these runtime actor names:
+Authenticated `app` and `org` requests use these runtime actor names. The public `com` surface has
+no authenticated actor; `Actor.tld` still identifies its surface as `:com`.
 
 | Surface | Actor type  | Helper           |
 | ------- | ----------- | ---------------- |
 | `app`   | `:client`   | `Actor.client`   |
 | `org`   | `:operator` | `Actor.operator` |
-| `com`   | `:visitor`  | `Actor.visitor`  |
 
 `Actor.whoami` returns the current actor type. `Actor.tld` returns the current surface label:
 `:app`, `:com`, `:org`, `:net`, or `:dev`.
@@ -114,8 +113,8 @@ Preference is exposed as an immutable value object through `Actor.preferences`.
 Request code should not read preference state from controller instance variables, raw JWT claims, or
 legacy current-context APIs when `Actor.preferences` is available.
 
-`Actor::Preference` contains the resolved display preference used by app/org/com flows. In normal
-authenticated requests it is initialized from the verified realm Preference JWT, then supported
+`Actor::Preference` contains the resolved display preference used by authenticated app/org flows.
+In normal authenticated requests it is initialized from the verified realm Preference JWT, then supported
 request-local context values such as `ri`, `lx`, `ct`, and `tz` are overlaid when explicitly
 present. That overlay affects only the current request and must not be copied back to the database
 or JWT.
@@ -172,12 +171,12 @@ authorization-library interface, not a `User` model or application-facing curren
 
 Do not rename the Action Policy subject to `actor`: `Actor` is already the request-local current
 context facade. Controllers should continue wiring Action Policy with
-`authorize :user, through: :current_client`, `:current_operator`, or `:current_visitor` as
-appropriate for the surface. Policies read token claims through `Actor.authz.token_claims`, not by
+`authorize :user, through: :current_client` or `:current_operator` as appropriate for the surface.
+Policies read token claims through `Actor.authz.token_claims`, not by
 falling back into authentication storage.
 
 `Actor.signed_in?` is the request-level predicate for an authenticated actor. It is true when the
-current actor type is `:client`, `:operator`, or `:visitor`.
+current actor type is `:client` or `:operator`.
 
 `Actor.signed_up?` is true only when the current request has an authenticated actor with a persisted
 identity. Anonymous users and unsaved actor objects return false.

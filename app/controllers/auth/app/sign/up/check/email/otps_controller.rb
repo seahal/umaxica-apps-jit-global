@@ -14,6 +14,7 @@ module Auth
               AUTHENTICATION_MODE = :guest
               sign_entry_classification! :sign_up
               skip_before_action :enforce_email_flow!
+              around_action :with_otp_verification_response_timing, only: :update
 
               def show
                 return unless load_gate_context!(gate_for_show)
@@ -26,23 +27,32 @@ module Auth
 
               def create
                 return unless load_gate_context!(gate_for_create)
+                return if reject_invalid_otp_resend_state?
 
                 @user_email = current_registration_email
                 return redirect_invalid_session unless @user_email
+                if otp_resend_json_request? && otp_resend_cooldown_remaining_for_json.positive?
+                  return render_otp_resend_rate_limited(otp_resend_cooldown_remaining_for_json)
+                end
 
                 begin
                   result = issue_otp_ceremony!
                 rescue ActiveJob::EnqueueError, EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable
+                  return render_otp_resend_failure if otp_resend_json_request?
+
                   return render_signup_email_delivery_unavailable
                 end
                 if result.status == :registered_destination
+                  return render_otp_resend_registered_destination if otp_resend_json_request?
+
                   return redirect_to(
                     auth_app_sign_up_check_email_otp_path(
                       **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
                     ),
                   )
                 end
-                return render_otp_ceremony_result(result) unless result.success?
+                return render_otp_issue_failure(result) unless result.success?
+                return render_otp_resend_success if otp_resend_json_request?
 
                 redirect_to(
                   auth_app_sign_up_check_email_otp_path(
@@ -112,6 +122,22 @@ module Auth
                   email: @user_email,
                   session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
+              end
+
+              def otp_resend_cooldown_remaining_for_json
+                now = ClientEmail.database_now
+                record_remaining = @user_email.otp_cooldown_remaining(now: now)
+                session_sent_at = session[:user_email_otp_last_sent_at].to_i
+                session_remaining = [
+                  session_sent_at + EmailOtpPolicy::SEND_COOLDOWN.to_i - Time.current.to_i,
+                  0,
+                ].max
+                [record_remaining, session_remaining].max
+              end
+
+              def render_otp_resend_registered_destination
+                session[:user_email_otp_last_sent_at] = Time.current.to_i
+                render_otp_resend_success
               end
 
               def verify_otp_ceremony!(submitted_code)

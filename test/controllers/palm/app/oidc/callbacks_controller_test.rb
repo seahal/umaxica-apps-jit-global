@@ -64,6 +64,12 @@ module Palm
             assert_equal id_token_payload.fetch("sid"), local_session.op_session_binding.sid
             assert_equal id_token_payload.fetch("sub"), local_session.op_session_binding.identity_binding.subject
 
+            get palm_app_root_path(ri: "jp")
+
+            assert_response :forbidden
+            assert_nil response.location
+            assert_equal "private, no-store", response.headers["Cache-Control"]
+
             get palm_app_dashboard_path(ri: "jp")
 
             assert_response :success

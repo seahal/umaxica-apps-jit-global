@@ -85,12 +85,14 @@ class JumpRtReceiverContractTest < ActiveSupport::TestCase
     assert_equal candidate.dig("header", "typ"), SecurityJwtJumpRtTokenCodec::TOKEN_TYPE
   end
 
-  test "vendored receiver and graph fixtures retain their pinned source hashes" do
+  test "vendored receiver and upstream graph fixtures retain their pinned source hashes" do
     files = {
       "jump_receiver_contract_0_4_0.json" =>
         "0db02b9412487931465a81e5e292e7bc6f0ca3eb06a1296e558348772cdadb9a",
       "jump_production_graph_0_4_0.json" =>
         "3e93ca422c35be5bb034d797ae61ddc9d0befcfd431ba12e3e859a43611588ab",
+      "jump_app_org_candidate_graph.json" =>
+        "1f9f68bf600cc1c018684ffbd5382c4a94d3cb57c8f1767fd957061257fbc179",
       "jump_receiver_contract.json" =>
         "7f884dcc348ff61cd94643b4dfbc0c5e27caa21fbf570abed81084b59471339e",
     }
@@ -103,7 +105,7 @@ class JumpRtReceiverContractTest < ActiveSupport::TestCase
   end
 
   test "Tech is outside the Jump issuer and navigation graph" do
-    graph = JSON.parse(Rails.root.join("test/fixtures/files/jump_production_graph_0_4_0.json").read)
+    graph = JSON.parse(Rails.root.join("test/fixtures/files/jump_app_org_candidate_graph.json").read)
 
     assert_raises(JumpRtConfigurationError) do
       JumpRtSurface.namespace_for_controller("Tech::Org::Sign::EntriesController")

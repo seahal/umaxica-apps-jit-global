@@ -18,4 +18,10 @@ class SignInCycleLocatorTest < ActiveSupport::TestCase
   test "a session with no locator entry at all resolves to no cycle" do
     assert_nil SignInCycleLocator.new({}, surface: :app).current
   end
+
+  test "stored reports whether this surface's locator entry exists, whatever its contents" do
+    assert_not SignInCycleLocator.new({}, surface: :app).stored?
+    assert_not SignInCycleLocator.new({ org_sign_in_flow_locator: {} }, surface: :app).stored?
+    assert_predicate SignInCycleLocator.new({ app_sign_in_flow_locator: {} }, surface: :app), :stored?
+  end
 end

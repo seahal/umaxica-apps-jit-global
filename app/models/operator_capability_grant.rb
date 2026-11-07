@@ -12,19 +12,12 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
 
   SUPPORT_CONSOLE_READ = "support.console.read"
   SUPPORT_ACCOUNT_READ_APP = "support.account.read.app"
-  SUPPORT_ACCOUNT_READ_COM = "support.account.read.com"
   SUPPORT_SESSION_REVOKE_APP = "support.session.revoke.app"
-  SUPPORT_SESSION_REVOKE_COM = "support.session.revoke.com"
   ENFORCEMENT_READ_APP = "enforcement.read.app"
-  ENFORCEMENT_READ_COM = "enforcement.read.com"
   ENFORCEMENT_APPLY_APP = "enforcement.apply.app"
-  ENFORCEMENT_APPLY_COM = "enforcement.apply.com"
   ENFORCEMENT_APPROVE_APP = "enforcement.approve.app"
-  ENFORCEMENT_APPROVE_COM = "enforcement.approve.com"
   ENFORCEMENT_RELEASE_APP = "enforcement.release.app"
-  ENFORCEMENT_RELEASE_COM = "enforcement.release.com"
   ENFORCEMENT_REVIEW_APPEAL_APP = "enforcement.review_appeal.app"
-  ENFORCEMENT_REVIEW_APPEAL_COM = "enforcement.review_appeal.com"
   IAM_CAPABILITY_READ = "iam.capability.read"
   IAM_CAPABILITY_GRANT = "iam.capability.grant"
   IAM_CAPABILITY_REVOKE = "iam.capability.revoke"
@@ -32,13 +25,13 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
 
   CAPABILITIES = [
     SUPPORT_CONSOLE_READ,
-    SUPPORT_ACCOUNT_READ_APP, SUPPORT_ACCOUNT_READ_COM,
-    SUPPORT_SESSION_REVOKE_APP, SUPPORT_SESSION_REVOKE_COM,
-    ENFORCEMENT_READ_APP, ENFORCEMENT_READ_COM,
-    ENFORCEMENT_APPLY_APP, ENFORCEMENT_APPLY_COM,
-    ENFORCEMENT_APPROVE_APP, ENFORCEMENT_APPROVE_COM,
-    ENFORCEMENT_RELEASE_APP, ENFORCEMENT_RELEASE_COM,
-    ENFORCEMENT_REVIEW_APPEAL_APP, ENFORCEMENT_REVIEW_APPEAL_COM,
+    SUPPORT_ACCOUNT_READ_APP,
+    SUPPORT_SESSION_REVOKE_APP,
+    ENFORCEMENT_READ_APP,
+    ENFORCEMENT_APPLY_APP,
+    ENFORCEMENT_APPROVE_APP,
+    ENFORCEMENT_RELEASE_APP,
+    ENFORCEMENT_REVIEW_APPEAL_APP,
     IAM_CAPABILITY_READ, IAM_CAPABILITY_GRANT, IAM_CAPABILITY_REVOKE,
     TECH_ACCESS,
   ].freeze

@@ -64,6 +64,10 @@ class SignInCycleLocator
     session.delete(session_key)
   end
 
+  def stored?
+    session.key?(session_key)
+  end
+
   private
 
   attr_reader :session, :surface, :cycle_class, :actor, :token

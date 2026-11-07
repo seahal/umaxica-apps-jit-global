@@ -16,13 +16,13 @@ module JitSecurityJwtRegistry
   REQUIRED_JWK_FIELDS = JitSecurityJwtJwk::REQUIRED_PUBLIC_FIELDS
   PRIVATE_JWK_FIELDS = JitSecurityJwtJwk::PRIVATE_FIELDS
   SURFACE_NAMESPACES = %w(
-    AUTH_APP AUTH_COM AUTH_ORG
-    ACME_APP ACME_COM ACME_ORG
-    CORE_APP CORE_COM CORE_ORG
-    WARP_APP WARP_COM WARP_ORG
+    AUTH_APP AUTH_ORG
+    ACME_APP ACME_ORG
+    CORE_APP CORE_ORG
+    WARP_APP WARP_ORG
     PALM_APP
-    BASE_APP BASE_COM BASE_ORG
-    VISA_APP VISA_COM VISA_ORG
+    BASE_APP BASE_ORG
+    VISA_APP VISA_ORG
   ).freeze
   MAX_JUMP_PUBLISHED_JWKS_KEYS = 4
   MAX_JUMP_PUBLISHED_JWKS_BYTES = 65_536
@@ -31,18 +31,18 @@ module JitSecurityJwtRegistry
   # capability is narrower than this list and is owned by JumpRtSurface::ISSUER_NAMESPACES.
   ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
   OIDC_CLIENT_NAMESPACES = %w(
-    AUTH_APP AUTH_COM AUTH_ORG
-    ACME_APP ACME_COM ACME_ORG
-    CORE_APP_JP CORE_COM_JP CORE_ORG_JP
-    BASE_APP BASE_COM BASE_ORG
-    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
-    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    AUTH_APP AUTH_ORG
+    ACME_APP ACME_ORG
+    CORE_APP_JP CORE_ORG_JP
+    BASE_APP BASE_ORG
+    BASE_RP_APP_WW BASE_RP_ORG_WW
+    WARP_APP_JP WARP_ORG_JP
     EDIT_ORG_WW
     PALM_APP_JP TECH_ORG_WW
   ).freeze
   REQUIRED_OIDC_CLIENT_NAMESPACES = %w(
-    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
-    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    BASE_RP_APP_WW BASE_RP_ORG_WW
+    WARP_APP_JP WARP_ORG_JP
     TECH_ORG_WW
   ).freeze
   # Issuer metadata for surface records without Jump issuer capability. Jump issuer records take
@@ -50,23 +50,17 @@ module JitSecurityJwtRegistry
   # same `iss` the RT carries, and an invalid origin fails at boot rather than at request time.
   SURFACE_ISSUER_ORIGINS = {
     "AUTH_APP" => "https://auth.umaxica.app",
-    "AUTH_COM" => "https://auth.umaxica.com",
     "AUTH_ORG" => "https://auth.umaxica.org",
     "ACME_APP" => "https://www.umaxica.app",
-    "ACME_COM" => "https://www.umaxica.com",
     "ACME_ORG" => "https://www.umaxica.org",
     "CORE_APP" => "https://jp.umaxica.app",
-    "CORE_COM" => "https://jp.umaxica.com",
     "CORE_ORG" => "https://jp.umaxica.org",
     "WARP_APP" => "https://www-jp.umaxica.app",
-    "WARP_COM" => "https://www-jp.umaxica.com",
     "WARP_ORG" => "https://www-jp.umaxica.org",
     "PALM_APP" => "https://palm-jp.umaxica.app",
     "BASE_APP" => "https://www.umaxica.app",
-    "BASE_COM" => "https://www.umaxica.com",
     "BASE_ORG" => "https://www.umaxica.org",
     "VISA_APP" => "https://visa.umaxica.app",
-    "VISA_COM" => "https://visa.umaxica.com",
     "VISA_ORG" => "https://visa.umaxica.org",
   }.freeze
   PREFERENCE_REALM_ISSUERS = {
@@ -78,7 +72,7 @@ module JitSecurityJwtRegistry
 
   DEFAULT_KID = "default"
   AUTH_AUDIENCE_ENV_NAMES = %w(
-    AUTH_JWT_CLIENT_AUDIENCES AUTH_JWT_VISITOR_AUDIENCES AUTH_JWT_OPERATOR_AUDIENCES
+    AUTH_JWT_CLIENT_AUDIENCES AUTH_JWT_OPERATOR_AUDIENCES
   ).freeze
   # kid substrings that mark non-production / throwaway signing material. Such a
   # kid must never appear outside local Rails environments: it means dev/test/

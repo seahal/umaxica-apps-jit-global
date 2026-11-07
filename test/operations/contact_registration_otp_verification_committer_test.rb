@@ -6,9 +6,10 @@ require "minitest/mock"
 # Boolean snapshots avoid disclosing OTP, proof and root material when an assertion fails.
 class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  include ActiveJob::TestHelper
 
   %i(email telephone).each do |channel|
-    test "APP #{channel} registration raises before consuming proof when another Client owns the destination" do
+    test "APP #{channel} registration refuses before consuming proof when another Client owns the destination" do
       actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
       nonce = SecureRandom.urlsafe_base64(32)
@@ -50,12 +51,24 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
       actor_facts = actor.reload.attributes
       competitor_facts = competitor.reload.attributes
 
-      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-        verifier.call(
+      result = nil
+      delivery_job = (channel == :email) ? OtpNotifierEmailDeliveryJob : Outbound::SmsDeliveryJob
+      deliveries_before = enqueued_jobs.count { |job| job.fetch(:job) == delivery_job }
+      log_messages = []
+      Rails.logger.stub(:warn, ->(message) { log_messages << message }) do
+        result = verifier.call(
           actor: actor, token: token, transaction: issued.transaction, browser_nonce: nonce,
           code: issued.code, **source,
         )
       end
+
+      assert_equal :invalid_code, result.status
+      assert_equal deliveries_before, enqueued_jobs.count { |job| job.fetch(:job) == delivery_job }
+      assert_equal 1, log_messages.length
+      assert_includes log_messages.first, "auth.registered_contact_destination.refused"
+      assert_includes log_messages.first, channel.to_s
+      assert_not_includes log_messages.first, contact.address.to_s if channel == :email
+      assert_not_includes log_messages.first, contact.number.to_s if channel == :telephone
 
       assert_equal contact_facts, contact.reload.attributes
       assert_equal ticket_facts, issued.transaction.reload.attributes

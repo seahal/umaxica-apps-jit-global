@@ -15,7 +15,7 @@ class OpLogoutTokenIssuer
   class << self
     public
 
-    # realm - "app", "com" or "org"; read from the participant's realm stop class when omitted.
+    # realm - "app" or "org"; read from the participant's realm stop class when omitted.
     def call(participant:, realm: nil, now: Time.current)
       realm ||= participant.class.name.delete_prefix("Op")[0, 3].downcase
       resource_type = RESOURCE_TYPES.fetch(realm.to_s)

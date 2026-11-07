@@ -208,11 +208,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         container["action"] = uri.path + (uri.query.present? ? "?#{uri.query}" : "")
       end
 
-      assert_equal real_props.fetch(resend_key).fetch("state").bytesize,
-                   dummy_props.fetch(resend_key).fetch("state").bytesize
-      assert_equal real_props.except(resend_key, "authenticity_token"),
-                   dummy_props.except(resend_key, "authenticity_token")
-      assert_equal real_props.fetch(resend_key).except("state"), dummy_props.fetch(resend_key).except("state")
+      assert_real_and_dummy_otp_page_contracts_match!(real_props:, dummy_props:, resend_key:)
 
       [real, dummy].each do |browser|
         state = begin
@@ -225,8 +221,9 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         browser.post("/web/v0/in/email/otp", params: { state: state }, as: :json)
 
-        assert_equal 200, browser.response.status
-        assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.1
+        assert_equal [200, true],
+                     [browser.response.status,
+                      Process.clock_gettime(Process::CLOCK_MONOTONIC) - started >= 0.1,]
       end
       model = ClientAuthCeremonySession
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -244,8 +241,9 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           },
         )
 
-        assert_equal 422, browser.response.status
-        assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.1
+        assert_equal [422, true],
+                     [browser.response.status,
+                      Process.clock_gettime(Process::CLOCK_MONOTONIC) - started >= 0.1,]
       end
       real_refusal =
         begin
@@ -274,10 +272,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         container["action"] = uri.path + (uri.query.present? ? "?#{uri.query}" : "")
       end
 
-      assert_equal real_refusal.except(resend_key, "authenticity_token"),
-                   dummy_refusal.except(resend_key, "authenticity_token")
-      assert_not_empty real_refusal.fetch("form_errors")
-      assert_equal real_refusal.fetch(resend_key).except("state"), dummy_refusal.fetch(resend_key).except("state")
+      assert_real_and_dummy_wrong_code_refusals_match!(real_refusal:, dummy_refusal:, resend_key:)
       # Boolean assertions keep OTP key material out of failure output.
       source_unchanged = source_generation == contact.reload.attributes.slice(*source_generation.keys)
 
@@ -324,4 +319,20 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def assert_real_and_dummy_otp_page_contracts_match!(real_props:, dummy_props:, resend_key:)
+    assert_equal real_props.fetch(resend_key).fetch("state").bytesize,
+                 dummy_props.fetch(resend_key).fetch("state").bytesize
+    assert_equal real_props.except(resend_key, "authenticity_token"),
+                 dummy_props.except(resend_key, "authenticity_token")
+    assert_equal real_props.fetch(resend_key).except("state"), dummy_props.fetch(resend_key).except("state")
+  end
+
+  def assert_real_and_dummy_wrong_code_refusals_match!(real_refusal:, dummy_refusal:, resend_key:)
+    assert_equal real_refusal.except(resend_key, "authenticity_token"),
+                 dummy_refusal.except(resend_key, "authenticity_token")
+    assert_not_empty real_refusal.fetch("form_errors")
+    assert_equal real_refusal.fetch(resend_key).except("state"),
+                 dummy_refusal.fetch(resend_key).except("state")
+  end
 end

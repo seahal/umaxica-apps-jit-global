@@ -109,12 +109,11 @@ OmniAuth.config.path_prefix = "/social"
 # =============================================================================
 # Replaces a blanket "block /social/* on every non-app host" rule with an
 # explicit provider allow-list per surface. Only Apple/Google are allowed on
-# the app surface; only Entra is allowed on the org (staff) surface; com
-# (corporate/public) hosts allow no external OmniAuth strategy at all.
+# the app surface; only Entra is allowed on the org (staff) surface.
 #
 # `entra` is allowed ONLY on the specific staff auth host that owns
 # /social/entra/callback (ExternalAuthenticationEntraRedirectUri), never on
-# sign/base/core hosts, and never on corporate (com) hosts.
+# sign/base/core hosts, and never on unrecognized hosts.
 class OmniAuthSocialProviderHostMatrix
   # Every OmniAuth provider mounted under /social/*. A path segment outside
   # this set (e.g. "authentication" in /social/authentication/completion,
@@ -199,11 +198,6 @@ class OmniAuthSocialProviderHostMatrix
     PUBLIC_BASE_SERVICE_URL PRIVATE_BASE_SERVICE_URL
   ).freeze
   ORG_HOST_ENV_KEYS = %w(PUBLIC_AUTH_STAFF_URL PRIVATE_AUTH_STAFF_URL).freeze
-  COM_HOST_ENV_KEYS = %w(
-    PUBLIC_AUTH_CORPORATE_URL PRIVATE_AUTH_CORPORATE_URL
-    PUBLIC_BASE_CORPORATE_URL PRIVATE_BASE_CORPORATE_URL
-  ).freeze
-
   # Deny by default. Every surface is recognized explicitly, and a host that
   # matches none of them classifies as :unknown, which `allowed?` refuses for
   # every provider and every /social/* path.
@@ -216,7 +210,7 @@ class OmniAuthSocialProviderHostMatrix
   # in another layer is not a reason for this layer to fail open.
   #
   # Host source is the shared boot config (ConfigValues::HostFamilyValues), plus
-  # the same PUBLIC_/PRIVATE_ ENV keys the org and com branches already consult;
+  # the same PUBLIC_/PRIVATE_ ENV keys the app and org branches already consult;
   # no new host list is defined here.
   def surface_for_host(host)
     boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
@@ -224,14 +218,10 @@ class OmniAuthSocialProviderHostMatrix
     # Both the auth service host (which owns the OmniAuth request/callback
     # paths) and the base service host (config/routes/base.rb, which owns
     # /social/authentication/continuation, .../completion and the app-surface
-    # provider callbacks) belong to the app surface, mirroring the com pair
-    # below.
+    # provider callbacks) belong to the app surface.
     app_hosts = [boot_hosts.auth_service.host, boot_hosts.base_service.host]
     return :app if app_hosts.include?(host) || env_host_match?(APP_HOST_ENV_KEYS, host)
     return :org if host == boot_hosts.auth_staff.host || env_host_match?(ORG_HOST_ENV_KEYS, host)
-
-    com_hosts = [boot_hosts.sign_corporate.host, boot_hosts.auth_corporate.host, boot_hosts.base_corporate.host]
-    return :com if com_hosts.include?(host) || env_host_match?(COM_HOST_ENV_KEYS, host)
 
     :unknown
   end

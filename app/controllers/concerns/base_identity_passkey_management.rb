@@ -57,7 +57,26 @@ module BaseIdentityPasskeyManagement
     browser_digest = AuthAdmissionBinding.browser_digest(
       surface: registration_surface, entry_ref: rp_session.public_id, nonce: browser_nonce,
     )
-    attributes = {
+    attributes = passkey_registration_authorization_attributes(
+      state:, nonce:, challenge:, rp_session:, browser_digest:,
+    )
+    access_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+    result = VisaSensitiveAdmissionClient.new(
+      surface: registration_surface, access_token:,
+    ).issue_admission!(attributes:)
+    return head :service_unavailable if result.status == :dependency
+    return head :unauthorized if result.status == :unauthorized
+    return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request unless result.ok?
+
+    redirect_to(result.authorization_url, status: :see_other, allow_other_host: true)
+  rescue ArgumentError, OidcAuthorizeRequestResolver::RequestError
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
+  private
+
+  def passkey_registration_authorization_attributes(state:, nonce:, challenge:, rp_session:, browser_digest:)
+    {
       response_type: "code",
       client_id: oidc_client_id,
       redirect_uri: oidc_callback_url,
@@ -74,20 +93,7 @@ module BaseIdentityPasskeyManagement
       purpose: "passkey_registration",
       provider: "none",
     }
-    access_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
-    result = VisaSensitiveAdmissionClient.new(
-      surface: registration_surface, access_token:,
-    ).issue_admission!(attributes:)
-    return head :service_unavailable if result.status == :dependency
-    return head :unauthorized if result.status == :unauthorized
-    return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request unless result.ok?
-
-    redirect_to(result.authorization_url, status: :see_other, allow_other_host: true)
-  rescue ArgumentError, OidcAuthorizeRequestResolver::RequestError
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
-
-  private
 
   def passkey_relation
     case identity_actor

@@ -35,10 +35,8 @@ class IdentityStepUpEmailDeliveryRecorder
                   transaction.with_lock do
                     session_record.with_lock do
                       now = transaction_model.database_now
-                      next false unless session_record.user_token_id == token.id && delivery_pending?(
-                        transaction, session_record, token, actor, credential,
-                        generation, now,
-                      )
+                      next false unless session_record.user_token_id == token.id &&
+                        delivery_pending?(transaction, session_record, token, actor, credential, generation, now)
 
                       next false unless payload_matches?(
                         transaction, credential, session_record, generation,

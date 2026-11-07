@@ -26,10 +26,6 @@ module Sign
         ENV["RISK_ENFORCEMENT_ENABLED"] = @original_enabled
       end
 
-      test "retired visitor actor is rejected" do
-        assert_raises(ArgumentError) { SignRiskEngine.score(visitor_id: 1) }
-      end
-
       test "score returns 0 when no user_id or staff_id provided" do
         assert_equal 0, SignRiskEngine.score
       end

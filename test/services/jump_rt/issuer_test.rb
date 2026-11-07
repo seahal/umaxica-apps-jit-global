@@ -429,11 +429,14 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
 
   test "resolves issuer namespace from controller class name" do
     assert_equal "AUTH_APP", JumpRtSurface.namespace_for_controller("Auth::App::DashboardsController")
-    assert_equal "AUTH_COM", JumpRtSurface.namespace_for_controller("Auth::Com::DashboardsController")
     assert_equal "AUTH_ORG", JumpRtSurface.namespace_for_controller("Auth::Org::DashboardsController")
     assert_equal "BASE_APP", JumpRtSurface.namespace_for_controller("Base::App::RootsController")
     assert_equal "CORE_ORG", JumpRtSurface.namespace_for_controller("Core::Org::RootsController")
-    assert_equal "BASE_COM", JumpRtSurface.namespace_for_controller("Base::Com::RootsController")
+    %w(Auth Base Core).each do |service|
+      assert_raises(JumpRtConfigurationError) do
+        JumpRtSurface.namespace_for_controller("#{service}::Com::RootsController")
+      end
+    end
     assert_raises(JumpRtConfigurationError) do
       JumpRtSurface.namespace_for_controller("Jump::App::RootsController")
     end
@@ -451,9 +454,10 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   end
 
   test "Core and Palm issuer origins match their public JWKS origins" do
-    %w(APP COM ORG).each do |tld|
+    %w(APP ORG).each do |tld|
       assert_equal "https://jp.umaxica.#{tld.downcase}", JumpRtSurface.issuer_origin("CORE_#{tld}")
     end
+    assert_raises(JumpRtConfigurationError) { JumpRtSurface.issuer_origin("CORE_COM") }
     assert_equal "PALM_APP", JumpRtSurface.namespace_for_controller("Palm::App::Sign::OutsController")
     assert_equal "https://palm-jp.umaxica.app", JumpRtSurface.issuer_origin("PALM_APP")
     assert_raises(JumpRtConfigurationError) do
@@ -461,13 +465,14 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  test "Warp uses independent Jump RT issuers while OIDC side client identifiers remain fixed" do
+  test "Warp app and org use independent Jump RT issuers while OIDC side client identifiers remain fixed" do
     assert_equal "WARP_APP", JumpRtSurface.namespace_for_controller("Warp::App::RootsController")
-    assert_equal "WARP_COM", JumpRtSurface.namespace_for_controller("Warp::Com::RootsController")
     assert_equal "WARP_ORG", JumpRtSurface.namespace_for_controller("Warp::Org::RootsController")
     assert_equal "https://www-jp.umaxica.app", JumpRtSurface.issuer_origin("WARP_APP")
-    assert_equal "https://www-jp.umaxica.com", JumpRtSurface.issuer_origin("WARP_COM")
     assert_equal "https://www-jp.umaxica.org", JumpRtSurface.issuer_origin("WARP_ORG")
+    assert_raises(JumpRtConfigurationError) do
+      JumpRtSurface.namespace_for_controller("Warp::Com::RootsController")
+    end
     warp_app = OidcClientStoresStaticClientStore.clients.fetch("warp-app-jp")
 
     assert_equal "warp-app-jp", warp_app.fetch(:aud)

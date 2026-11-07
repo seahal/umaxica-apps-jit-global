@@ -16,6 +16,10 @@ module Edit
 
         private
 
+        def oidc_rp_default_landing_path
+          "/"
+        end
+
         def oidc_client_id
           "edit-org-ww"
         end

@@ -34,6 +34,7 @@ module Auth
 
             # to avoid session attack
             session[:user_telephone_registration] = nil
+            session.delete(:user_telephone_otp_last_sent_at)
             sign_up_flow_locator.clear!
             log_sign_signup_event(
               "sign.signup.telephone.new.rendered",
@@ -160,6 +161,8 @@ module Auth
                 render_initial_signup_otp_refusal(issued)
                 return
               end
+              session[:user_telephone_otp_last_sent_at] = Time.current.to_i if
+                issued.status == :registered_destination
               redirect_to(
                 auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
               )
@@ -242,6 +245,7 @@ module Auth
 
           def sign_up_telephone_edit_props
             errors = sign_up_telephone_errors
+            binding_params = sign_up_flow_binding_params
 
             {
               title: t("sign.app.registration.telephone.edit.page_title"),
@@ -249,7 +253,7 @@ module Auth
                 @otp_delivery_unavailable ? "errors.rate_limit.backend_unavailable" :
                   "sign.app.registration.telephone.create.verification_code_sent",
               ),
-              action: auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
+              action: auth_app_sign_up_check_telephone_otp_path(**binding_params, ri: params[:ri]),
               scope: "client_telephone",
               code_label: t("sign.app.registration.telephone.edit.code_label"),
               code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
@@ -262,15 +266,34 @@ module Auth
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
                         action: auth_app_sign_up_check_telephone_otp_path(
-                          **sign_up_flow_binding_params,
+                          **binding_params,
                           ri: params[:ri],
                         ),
                         method: "delete", },
+              otp_resend: {
+                endpoint: auth_app_sign_up_check_telephone_otp_path(
+                  **binding_params, ri: params[:ri], pt: signed_pt_param,
+                ),
+                state: binding_params.fetch(AuthIoKeys::Params::FLOW_BINDING),
+                messages: {
+                  button_label: t("otp.resend.button"),
+                  sent_message: t("otp.resend.sent"),
+                  too_soon_message: t("otp.resend.too_soon"),
+                  failed_message: t("otp.resend.failed"),
+                },
+              },
             }
           end
 
           def sign_up_telephone_errors
-            @user_telephone&.errors&.map(&:full_message) || []
+            invalid_code_message = t("sign.app.registration.telephone.update.invalid_code")
+            @user_telephone&.errors&.map do |error|
+              if error.attribute == :pass_code && error.message == invalid_code_message
+                error.message
+              else
+                error.full_message
+              end
+            end || []
           end
 
           # The wording the ERB built with `pluralize`, kept verbatim.
@@ -301,7 +324,26 @@ module Auth
           end
 
           def render_otp_resend_too_soon
+            if request.format.json?
+              return render_otp_resend_rate_limited(telephone_otp_resend_cooldown_remaining)
+            end
+
             render plain: t("sign.app.registration.email.create.otp_resend_too_soon"), status: :too_many_requests
+          end
+
+          def telephone_otp_resend_cooldown_remaining
+            now = @user_telephone.class.database_now
+            sent_at = @user_telephone.otp_last_sent_at
+            record_remaining = resend_cooldown_remaining(sent_at, now)
+            session_sent_at = session[:user_telephone_otp_last_sent_at].to_i
+            session_remaining = [session_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN.to_i - Time.current.to_i, 0].max
+            [record_remaining, session_remaining].max
+          end
+
+          def resend_cooldown_remaining(sent_at, now)
+            return 0 if sent_at.blank? || sent_at == -Float::INFINITY
+
+            [sent_at + TelephoneOtpPolicy::SEND_COOLDOWN - now, 0].max
           end
 
           def render_telephone_session_expired

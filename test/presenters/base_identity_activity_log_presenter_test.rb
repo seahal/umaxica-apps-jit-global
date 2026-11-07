@@ -105,7 +105,9 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "rejects an unsupported surface" do
-    assert_raises(ArgumentError) { Base::Identity::ActivityLogPresenter.new(surface: :warp) }
+    [nil, "", :com, :visitor, :customer, :warp].each do |surface|
+      assert_raises(ArgumentError) { Base::Identity::ActivityLogPresenter.new(surface:) }
+    end
   end
 
   test "merges persisted legacy and common passkey history under owner scope before limiting" do
@@ -261,7 +263,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
     assert_equal [common, legacy], presenter.app_activities(scope, client: client)
   end
 
-  test "does not present common Chronicle passkey events on another surface" do
+  test "does not present common Chronicle passkey events on the org surface" do
     activity = CommonActivityRecord.new(
       action: "passkey.removed",
       metadata: { "surface" => "app", "actor_ref" => "client-1" },
@@ -271,7 +273,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
       id: 1,
     )
 
-    assert_nil Base::Identity::ActivityLogPresenter.new(surface: :com).present(activity)
+    assert_nil Base::Identity::ActivityLogPresenter.new(surface: :org).present(activity)
   end
 
   test "labels an Apple provider sign-in and common device agents" do

@@ -1,6 +1,6 @@
 # Core browser API request boundary
 
-Core app/com/org browser APIs verify unsafe requests before refresh or other action
+Core app/org browser APIs verify unsafe requests before refresh or other action
 processing. Each surface explicitly includes TrustedOriginForgeryProtection; the
 existing CoreBrowserApiBoundary CSRF callback requires all of:
 

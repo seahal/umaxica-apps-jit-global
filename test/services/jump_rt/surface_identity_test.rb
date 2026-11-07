@@ -6,27 +6,22 @@ require "test_helper"
 class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "Jump issuer capability includes the three Visa namespaces" do
+  test "Jump issuer capability includes active app and org namespaces and Palm app" do
     expected = {
       "AUTH_APP" => "PUBLIC_AUTH_SERVICE_URL",
-      "AUTH_COM" => "PUBLIC_AUTH_CORPORATE_URL",
       "AUTH_ORG" => "PUBLIC_AUTH_STAFF_URL",
       "BASE_APP" => "PUBLIC_BASE_SERVICE_URL",
-      "BASE_COM" => "PUBLIC_BASE_CORPORATE_URL",
       "BASE_ORG" => "PUBLIC_BASE_STAFF_URL",
       "VISA_APP" => "PUBLIC_VISA_SERVICE_URL",
-      "VISA_COM" => "PUBLIC_VISA_CORPORATE_URL",
       "VISA_ORG" => "PUBLIC_VISA_STAFF_URL",
       "CORE_APP" => "PUBLIC_CORE_SERVICE_URL",
-      "CORE_COM" => "PUBLIC_CORE_CORPORATE_URL",
       "CORE_ORG" => "PUBLIC_CORE_STAFF_URL",
       "WARP_APP" => "PUBLIC_WARP_SERVICE_URL",
-      "WARP_COM" => "PUBLIC_WARP_CORPORATE_URL",
       "WARP_ORG" => "PUBLIC_WARP_STAFF_URL",
       "PALM_APP" => "PUBLIC_PALM_SERVICE_URL",
     }
 
-    assert_equal 16, JumpRtSurface::ISSUER_NAMESPACES.size
+    assert_equal 11, JumpRtSurface::ISSUER_NAMESPACES.size
     assert_equal expected, JumpRtSurface::ISSUER_ORIGIN_ENV
     assert_equal expected.keys.sort, JumpRtSurface::ISSUER_NAMESPACES.sort
   end
@@ -40,10 +35,12 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
     end
   end
 
-  test "Visa controllers resolve to the Visa Jump issuer namespace" do
+  test "Visa app and org controllers resolve to active Jump issuer namespaces" do
     assert_equal "VISA_APP", JumpRtSurface.namespace_for_controller("Visa::App::Oauth::AuthorizationsController")
-    assert_equal "VISA_COM", JumpRtSurface.namespace_for_controller("Visa::Com::Oauth::TokensController")
     assert_equal "VISA_ORG", JumpRtSurface.namespace_for_controller("Visa::Org::Sign::ByesController")
+    assert_raises(JumpRtConfigurationError) do
+      JumpRtSurface.namespace_for_controller("Visa::Com::Oauth::TokensController")
+    end
   end
 
   test "Acme controllers have no Jump issuer namespace" do
@@ -108,7 +105,6 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
     canonical = {
       "AUTH_APP" => "auth.umaxica.app",
       "BASE_APP" => "www.umaxica.app",
-      "CORE_COM" => "jp.umaxica.com",
       "WARP_ORG" => "www-jp.umaxica.org",
       "PALM_APP" => "palm-jp.umaxica.app",
     }

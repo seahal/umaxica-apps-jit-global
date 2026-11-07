@@ -28,38 +28,31 @@ policy, not exemptions for new work. Method-preserving POST handoffs retain thei
 ## Decision
 
 Approved cross-surface browser GET navigation uses Jump. Registrable-domain equality does not merge
-trust boundaries. `JumpRtReturnPolicy::ALLOWED_EDGES` lists the twenty directed
+trust boundaries. `JumpRtReturnPolicy::ALLOWED_EDGES` lists the fourteen approved non-Visa directed
 `[source, destination]` pairs between the logical issuer namespaces; with the production `PUBLIC_*`
-settings they connect these origins in both directions:
+settings they connect the remaining Base app/org origins in both directions:
 
 | Base origin               | Approved peers                                                                    |
 | ------------------------- | --------------------------------------------------------------------------------- |
 | `https://www.umaxica.app` | `auth.umaxica.app`, `jp.umaxica.app`, `www-jp.umaxica.app`, `palm-jp.umaxica.app` |
-| `https://www.umaxica.com` | `auth.umaxica.com`, `jp.umaxica.com`, `www-jp.umaxica.com`                        |
 | `https://www.umaxica.org` | `auth.umaxica.org`, `jp.umaxica.org`, `www-jp.umaxica.org`                        |
 
 The normalized implementation graph is:
 
 ```text
 auth-app-ww -> base-app-ww
-auth-com-ww -> base-com-ww
 auth-org-ww -> base-org-ww
 base-app-ww -> auth-app-ww
 base-app-ww -> core-app-jp
 base-app-ww -> palm-app-jp
 base-app-ww -> warp-app-jp
-base-com-ww -> auth-com-ww
-base-com-ww -> core-com-jp
-base-com-ww -> warp-com-jp
 base-org-ww -> auth-org-ww
 base-org-ww -> core-org-jp
 base-org-ww -> warp-org-jp
 core-app-jp -> base-app-ww
-core-com-jp -> base-com-ww
 core-org-jp -> base-org-ww
 palm-app-jp -> base-app-ww
 warp-app-jp -> base-app-ww
-warp-com-jp -> base-com-ww
 warp-org-jp -> base-org-ww
 ```
 
@@ -69,7 +62,7 @@ are absent. Adding an RP requires an explicit decision. Core is `jp.*`; Warp is 
 
 Because self-loops are absent, a navigation whose target shares the request's origin (scheme, host
 and port) does not use Jump; the gateway refuses such an rt with `invalid_dst`. The Base self-RPs
-(`base-app-ww`, `base-com-ww`, `base-org-ww`) share their origin with their authority, so the
+(`base-app-ww`, `base-org-ww`) share their origin with their authority, so the
 `POST /sign` start to `/oauth/authorize`, the authorization code return to `/oidc/callback` and the
 `prompt=none` `login_required` return move by path through
 `CommonRedirect#redirect_to_same_origin_or_jump_url`, which callers opt into explicitly. A
@@ -77,7 +70,7 @@ cross-origin target, including another RP's callback on a Base authority, still 
 `www.jp.*` is rejected, never rewritten to Warp. Node region reflects the deployment; query `ri`
 does not change these origins' identities.
 
-Auth surface JWT identities are `AUTH_APP/COM/ORG` with `auth.umaxica.*` issuer origins. Retired
+Auth surface JWT identities are `AUTH_APP/ORG` with `auth.umaxica.*` issuer origins. Retired
 `SIGN_*` identities and `Sign::*` controller mappings have no fallback. `/sign/...` ceremony paths
 and persisted/OIDC `side-*` and `SIDE_*` identifiers remain. Logical identity-ceremony contracts
 using `log.*` are separate from Jump surface identity and remain unchanged.
@@ -181,18 +174,21 @@ setting. That redesign is intentionally deferred.
 
 ### Issuer identity and keys
 
-Jump issuer capability is exactly thirteen namespaces, held in `JumpRtSurface::ISSUER_NAMESPACES`
-and kept separate from the general JWT registry namespaces: `AUTH_APP/COM/ORG`, `BASE_APP/COM/ORG`,
-`CORE_APP/COM/ORG`, `WARP_APP/COM/ORG` and `PALM_APP`. `ACME_*` remain general registry namespaces
-but have no Jump issuer capability; no `Acme::*` controller exists, and Base-hosted Acme behavior
-issues through the Base or Auth controller handling the request. Edit is a receiver only.
+Jump issuer capability is exactly eleven namespaces, held in `JumpRtSurface::ISSUER_NAMESPACES`
+and kept separate from the general JWT registry namespaces: app/org for Auth, Base, Visa, Core and
+Warp, plus `PALM_APP`. The corporate authentication realm has no Jump issuer. `ACME_APP` and
+`ACME_ORG` remain general registry namespaces but have no Jump issuer capability; no `Acme::*`
+controller exists, and Base-hosted Acme behavior issues through the Base or Auth controller handling
+the request. Edit is a receiver only.
 
 Each issuer origin is derived from the existing public surface setting (`PUBLIC_AUTH_*_URL`,
-`PUBLIC_BASE_*_URL`, `PUBLIC_CORE_*_URL`, `PUBLIC_WARP_*_URL`, `PUBLIC_PALM_SERVICE_URL`). The same
+`PUBLIC_BASE_*_URL`, `PUBLIC_VISA_*_URL`, `PUBLIC_CORE_*_URL`, `PUBLIC_WARP_*_URL`,
+`PUBLIC_PALM_SERVICE_URL`). The same
 origin is the return origin, and the issuer JWKS URI is that origin plus `/.well-known/jwks.json`.
 There are no Jump-specific issuer, return or JWKS settings, and the `JUMP_DEVELOPMENT_<NS>_*` and
 `JWT_DEVELOPMENT_<NS>_*` families were removed without replacement. The receiver maps origins to
-namespaces through the same settings, so another environment's identities use the same twenty edges;
+namespaces through the same settings, so another environment's identities use the same fourteen
+non-Visa edges;
 a duplicated origin is a configuration error.
 
 Each issuer keeps its own ES384 key. In development and test the surface keys are owned by
@@ -220,7 +216,7 @@ accident of configuration.
 Inside Rails the binding is checked without network access. At boot, `JitSecurityJwtRegistry` builds
 each Jump issuer record with `JumpRtSurface.issuer_origin`, so an invalid or missing `PUBLIC_*`
 issuer origin fails boot, and the record holding the signing key names the same `iss` that Jump RTs
-carry. `test/integration/jump_rt_issuer_jwks_authority_test.rb` signs an RT for each of the thirteen
+carry. `test/integration/jump_rt_issuer_jwks_authority_test.rb` signs an RT for each of the eleven
 issuers, checks `iss`, `alg=ES384` and the kid, fetches that surface's `/.well-known/jwks.json` from
 the Rails renderer, confirms the kid is present and no private fields are exposed, and verifies the
 RT signature against that JWKS.

@@ -2,8 +2,7 @@
 # frozen_string_literal: true
 
 # adr/operator-capability-authorization.md, Support: input validation and page shaping shared by
-# the per-realm session revocation controllers (Support::Clients::RevocationsController and
-# Support::Visitors::RevocationsController).
+# the client session revocation controller (Support::Clients::RevocationsController).
 #
 # It deliberately does not choose the target class, authorize, require Step-Up, or call the
 # revocation: each concrete controller states those itself. Contract: the including controller also

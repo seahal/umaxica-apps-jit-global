@@ -441,7 +441,7 @@ never halt the current flow B. A missing or invalid binding is refused without u
 session locator as a substitute authority.
 
 The existing Auth ceremony/Base session-issuance boundary is unchanged. Email OTP, passkey, MFA, and
-the local app/com sign-in routes use this binding where a local `SignInFlow` is the authoritative
+the local app sign-in routes use this binding where a local `SignInFlow` is the authoritative
 phase object. Social callbacks, org Entra, and other credential families retain their existing
 provider state or concrete ceremony transaction as the primary authority when no local sign-in flow
 is present; they are not forced into a universal flow object. The existing `commit_login_session!`

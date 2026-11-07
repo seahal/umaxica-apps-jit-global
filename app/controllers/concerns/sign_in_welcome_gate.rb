@@ -14,7 +14,6 @@ module SignInWelcomeGate
   def welcome_gate_key
     {
       "app" => :app_sign_in_welcome,
-      "com" => :com_sign_in_welcome,
       "org" => :org_sign_in_welcome,
     }[sign_in_sequence_surface.to_s] || :sign_in_welcome
   end

@@ -105,7 +105,8 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
           end
           if flow0_index.zero?
             raise RuntimeError,
-                  "Base authorization host mismatch" unless flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
+                  "Base authorization host mismatch" unless
+                    flow0_target.host == visa_host_for_test_base_host(flow0_base_host)
 
             @base_browser.host!(flow0_target.host)
             @base_browser.get(flow0_target.request_uri)
@@ -119,7 +120,8 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
               }
             @base_browser.post(
               flow0_form["action"], params: flow0_fields, headers: {
-                "Origin" => "https://#{visa_host_for_test_base_host(flow0_base_host)}", "Sec-Fetch-Site" => "same-origin",
+                "Origin" => "https://#{visa_host_for_test_base_host(flow0_base_host)}",
+                "Sec-Fetch-Site" => "same-origin",
               },
             )
           else
@@ -874,8 +876,7 @@ class SocialLoginRobustnessTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

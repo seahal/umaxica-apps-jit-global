@@ -2,17 +2,16 @@
 
 ## Current Visa OP / Base RP Authority (2026-10-24)
 
-Visa is the sole physical OIDC Identity Provider and Authorization Server for the three UMAXICA
-realms. Visa owns the Browser Session and the surface-local authority state. Base is the Base
-browser relying party and owns its host-local RP Session beneath that authority. The seven
-first-party browser RPs (`core-app`, `core-com`, `core-org`, `side-app`, `side-com`, `side-org`, and
+Visa is the sole physical OIDC Identity Provider and Authorization Server for the active app and
+org authentication realms. Visa owns the Browser Session and the surface-local authority state.
+Base is the Base browser relying party and owns its host-local RP Session beneath that authority.
+The five active first-party browser RPs (`core-app`, `core-org`, `side-app`, `side-org`, and
 `edit-org`) receive their Access and Refresh credentials from the corresponding Visa token endpoint
 and store those credentials only in host-only RP cookies on the RP host. A browser RP callback does
-not call the generic root `log_in` path and does not create a second ClientToken, VisitorToken, or
-OperatorToken.
+not call the generic root `log_in` path or create a second actor token.
 
-The Base Self-RP follows the same rule: its RP credentials and callback remain on `www.umaxica.app`,
-`.com`, and `.org`, while authorization, token, UserInfo, revocation and end-session requests are
+The Base Self-RP follows the same rule: its RP credentials and callback remain on `www.umaxica.app`
+and `.org`, while authorization, token, UserInfo, revocation and end-session requests are
 sent to the corresponding `visa.umaxica.*` host. Visa and Base cookies are host-only and are never
 treated as interchangeable credentials.
 

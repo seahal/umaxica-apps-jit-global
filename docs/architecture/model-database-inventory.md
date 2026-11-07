@@ -26,6 +26,11 @@ assumptions.
 
 ## Scope
 
+Application-owned abstract model bases explicitly set `self.strict_loading_by_default = true`,
+including database connection owners and semantic bases. Their concrete models inherit this
+setting. This complements the existing application-wide Active Record default; it does not
+change connection ownership or configure framework-owned models such as Solid Queue records.
+
 In scope:
 
 - database connections

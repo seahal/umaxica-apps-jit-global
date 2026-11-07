@@ -178,6 +178,7 @@ module Auth
               @sign_up_initial_otp_refusal = issued
               return true
             end
+            session[:user_email_otp_last_sent_at] = Time.current.to_i if issued.status == :registered_destination
 
             true
           rescue ActiveJob::EnqueueError, EmailSignUpOtpDeliveryIssuer::DeliveryUnavailable
@@ -250,6 +251,7 @@ module Auth
           end
 
           def sign_up_email_edit_props
+            binding_params = sign_up_flow_binding_params
             {
               title: t("sign.app.authentication.email.edit.page_title"),
               description: t(
@@ -257,8 +259,8 @@ module Auth
                   "sign.app.registration.email.create.verification_code_sent",
               ),
               action: auth_app_sign_up_check_email_otp_path(
-                **sign_up_flow_binding_params, ri: params[:ri],
-                                               pt: signed_pt_param,
+                **binding_params, ri: params[:ri],
+                                  pt: signed_pt_param,
               ),
               scope: "client_email",
               code_label: t("sign.app.authentication.email.edit.code_label"),
@@ -272,15 +274,34 @@ module Auth
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
                         action: auth_app_sign_up_check_email_otp_path(
-                          **sign_up_flow_binding_params, ri: params[:ri],
-                                                         pt: signed_pt_param,
+                          **binding_params, ri: params[:ri],
+                                            pt: signed_pt_param,
                         ),
                         method: "delete", },
+              otp_resend: {
+                endpoint: auth_app_sign_up_check_email_otp_path(
+                  **binding_params, ri: params[:ri], pt: signed_pt_param,
+                ),
+                state: binding_params.fetch(AuthIoKeys::Params::FLOW_BINDING),
+                messages: {
+                  button_label: t("otp.resend.button"),
+                  sent_message: t("otp.resend.sent"),
+                  too_soon_message: t("otp.resend.too_soon"),
+                  failed_message: t("otp.resend.failed"),
+                },
+              },
             }
           end
 
           def sign_up_email_errors
-            @user_email&.errors&.map(&:full_message) || []
+            invalid_code_message = t("sign.app.registration.email.update.invalid_code")
+            @user_email&.errors&.map do |error|
+              if error.attribute == :pass_code && error.message == invalid_code_message
+                error.message
+              else
+                error.full_message
+              end
+            end || []
           end
 
           def sign_up_email_input_value
@@ -401,9 +422,7 @@ module Auth
             raw = params.dig(:client_email, :raw_address) ||
               params.dig(:client_email, :address) ||
               params.dig(:user_email, :raw_address) ||
-              params.dig(:user_email, :address) ||
-              params.dig(:visitor_email, :raw_address) ||
-              params.dig(:visitor_email, :address)
+              params.dig(:user_email, :address)
             return nil if raw.blank?
 
             normalized = JitUtilsEmailValidator.normalize(raw)

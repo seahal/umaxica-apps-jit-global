@@ -111,11 +111,10 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
     end
   end
 
-  test "production rejects the reserved test TLD in auth audiences" do
-    with_env("AUTH_JWT_VISITOR_AUDIENCES" => "api.example.test") do
-      with_production do
-        assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences("visitor") }
-      end
+  test "retired and unknown auth resource types are refused" do
+    [nil, "", "visitor", "unknown"].each do |resource_type|
+      assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences(resource_type) }
+      assert_raises(ArgumentError) { AuthenticationJwtConfiguration.client_id(resource_type) }
     end
   end
 

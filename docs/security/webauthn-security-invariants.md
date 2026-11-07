@@ -48,12 +48,11 @@ previously shipped as defects, so static tests reject their reintroduction.
   valid, including two physical keys of the same product or multiple passkeys from one provider.
 - WebAuthn cannot reliably determine whether one physical authenticator generated a new credential
   ID, especially with `attestation: "none"`. This is an accepted protocol limitation.
-- RP IDs differ across app/com/org, so one authenticator creates separate credentials for each
-  surface. Cross-surface credential sharing and duplication do not occur within this architecture;
+- RP IDs differ across app/org, so one authenticator creates separate credentials for each
+  active surface. Cross-surface credential sharing and duplication do not occur within this architecture;
   see `docs/security/webauthn-rp-id-origin-boundary.md`.
-- The com surface issues no Passkey ceremony after the WU-3 anonymous-com change. Its RP
-  configuration keys and surface value remain for the other surfaces' separation checks, but no
-  com route reaches them.
+- The com authentication surface was retired on 2026-11-07. It is absent from the active WebAuthn
+  registry; existing visitor credential records remain persisted data and are not an active surface.
 
 ## Discoverable Direct Sign-in
 
@@ -98,7 +97,7 @@ previously shipped as defects, so static tests reject their reintroduction.
 ## RP Configuration
 
 - RP ID and origin come only from an explicit surface declaration such as `webauthn_surface :app`
-  and the matching `WEBAUTHN_<APP|COM|ORG>_*` configuration. Prohibit `request.host` fallback,
+  and the matching `WEBAUTHN_<APP|ORG>_*` configuration. Prohibit `request.host` fallback,
   shared environment keys, class-name regex surface inference, and mutation of global
   `WebAuthn.configure` state.
 - `from_get` and `from_create` always receive an explicit `relying_party:` argument.

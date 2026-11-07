@@ -634,11 +634,12 @@ module Auth::App::Up
       cycle_facts = cycle.reload.attributes
       candidate_owner = contact_owner_for_test(telephone)
       candidate_owner_facts = candidate_owner.reload.attributes
-      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-        patch birthdate_path, params: {
-          requirement: "birthdate", birthdate: "2000-01-01", checkpoint_version: cycle.reload.checkpoint_version,
-        }
-      end
+      patch birthdate_path, params: {
+        requirement: "birthdate", birthdate: "2000-01-01", checkpoint_version: cycle.reload.checkpoint_version,
+      }
+
+      assert_response :unprocessable_content
+      assert_equal I18n.t("errors.messages.invalid_request"), response.body.strip
 
       assert_equal telephone_facts, telephone.reload.attributes
       assert_equal cycle_facts, cycle.reload.attributes

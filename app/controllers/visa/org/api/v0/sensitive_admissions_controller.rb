@@ -26,9 +26,7 @@ module Visa
               admission_ref: issuance.admission.public_ref,
               authorization_url: issuance.authorization_url,
             }, status: :created
-          rescue VisaSensitiveAdmissionIssuer::InvalidRequest
-            render json: { error: "invalid_request" }, status: :bad_request
-          rescue ActionController::ParameterMissing
+          rescue VisaSensitiveAdmissionIssuer::InvalidRequest, ActionController::ParameterMissing
             render json: { error: "invalid_request" }, status: :bad_request
           rescue ActiveRecord::ActiveRecordError, PG::Error => e
             Rails.logger.error(

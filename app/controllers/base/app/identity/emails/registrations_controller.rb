@@ -26,6 +26,7 @@ module Base
           step_up only: %i(new create edit update), bootstrap: true
           before_action :require_email_bootstrap_when_unconfigured!, only: %i(new create edit update)
           around_action :with_otp_issue_response_timing, only: %i(create resend)
+          around_action :with_otp_verification_response_timing, only: :update
 
           def new = super
 
@@ -37,6 +38,9 @@ module Base
             super
           rescue EmailCredentialRegistrationOtpFinalizer::DependencyFailure
             head :service_unavailable
+          rescue AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
+            @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
+            render_email_registration_edit(status: :unprocessable_content)
           end
 
           def resend = super
@@ -154,6 +158,19 @@ module Base
                    status: status
           end
 
+          def email_registration_error_messages
+            return [] unless @user_email
+
+            invalid_code_message = t("sign.app.registration.email.update.invalid_code")
+            @user_email.errors.map do |error|
+              if error.attribute == :pass_code && error.message == invalid_code_message
+                error.message
+              else
+                error.full_message
+              end
+            end
+          end
+
           def email_registration_new_props
             {
               title: "Add an email address",
@@ -198,7 +215,7 @@ module Base
                 label: t("otp.resend.button"),
                 url: base_app_identity_emails_registration_redelivery_path(ri: params[:ri], pt: signed_pt_param),
               },
-              errors: Array(@user_email&.errors&.full_messages),
+              errors: email_registration_error_messages,
             }
           end
 

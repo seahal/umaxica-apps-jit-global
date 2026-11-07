@@ -10,6 +10,7 @@
 # It ensures that only one instance of the model exists and provides convenient access to it.
 class OccurrenceRecord < ApplicationRecord
   self.abstract_class = true
+  self.strict_loading_by_default = true
 
   connects_to database: { writing: :occurrence, reading: :occurrence_replica }
 end

@@ -101,7 +101,8 @@ module OidcClientStoresStaticClientStore
                      step_up_callback_path: nil,
                      sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH,
                      required_operator_capability: nil)
-    callback_paths = [callback_path, step_up_callback_path].compact.uniq
+    callback_paths = [callback_path, step_up_callback_path].compact
+    callback_paths.uniq!
     {
       redirect_uris_by_realm: {
         resource_type => callback_paths.flat_map do |path|
@@ -185,16 +186,12 @@ module OidcClientStoresStaticClientStore
       case env_key
       when "PUBLIC_AUTH_SERVICE_URL", "PRIVATE_AUTH_SERVICE_URL" then hosts.sign_service.to_s
       when "PUBLIC_AUTH_STAFF_URL", "PRIVATE_AUTH_STAFF_URL" then hosts.sign_staff.to_s
-      when "PUBLIC_AUTH_CORPORATE_URL", "PRIVATE_AUTH_CORPORATE_URL" then hosts.sign_corporate.to_s
       when "BASE_SERVICE_URL" then hosts.base_service.to_s
       when "BASE_STAFF_URL" then hosts.base_staff.to_s
-      when "BASE_CORPORATE_URL" then hosts.base_corporate.to_s
       when "PUBLIC_WARP_SERVICE_URL" then hosts.warp_service.to_s
       when "PUBLIC_WARP_STAFF_URL" then hosts.warp_staff.to_s
-      when "PUBLIC_WARP_CORPORATE_URL" then hosts.warp_corporate.to_s
       when "PUBLIC_CORE_SERVICE_URL", "CORE_SERVICE_URL" then hosts.core_service.to_s
       when "PUBLIC_CORE_STAFF_URL", "CORE_STAFF_URL" then hosts.core_staff.to_s
-      when "PUBLIC_CORE_CORPORATE_URL", "CORE_CORPORATE_URL" then hosts.core_corporate.to_s
       when "PUBLIC_PALM_SERVICE_URL" then hosts.palm_service.to_s
       when "PUBLIC_TECH_STAFF_URL", "PRIVATE_TECH_STAFF_URL" then hosts.tech_staff.to_s
       else

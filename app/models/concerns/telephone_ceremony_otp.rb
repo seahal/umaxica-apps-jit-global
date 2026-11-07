@@ -13,7 +13,6 @@ module TelephoneCeremonyOtp
   OTP_TTL = 5.minutes
   OTP_VERIFIER_KEYS = {
     "app" => "APP_TELEPHONE_OTP_VERIFIER_KEY",
-    "com" => "COM_TELEPHONE_OTP_VERIFIER_KEY",
     "org" => "ORG_TELEPHONE_OTP_VERIFIER_KEY",
   }.freeze
 

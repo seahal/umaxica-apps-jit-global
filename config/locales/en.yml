@@ -922,7 +922,6 @@ en:
     code: Code
     code_challenge: Code challenge
     code_challenge_method: Code challenge method
-    com_enforcement_case_id: COM enforcement case ID
     com_preference_languages: Language preferences
     com_preference_regions: Region preferences
     com_preference_themes: Theme preferences
@@ -1693,7 +1692,7 @@ en:
         support:
           areas: Areas
           clients: App clients
-          description: Account support for the app and com realms.
+          description: Account support for app clients.
           enforcement_app: App enforcement cases
           title: Support
         values:
@@ -2429,8 +2428,7 @@ en:
       invalid_request: Invalid request.
       less_than: must be less than %{count}
       less_than_or_equal_to: must be less than or equal to %{count}
-      login_cooldown_retry:
-        Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}
+      login_cooldown_retry: Sign-in is temporarily unavailable. Please wait a moment, then sign in again.
       login_required: "You must sign in."
       model_invalid: "Validation failed: %{errors}"
       not_a_number: is not a number
@@ -2746,6 +2744,11 @@ en:
     japanese: 日本語
   layouts:
     shared:
+      account_navigation:
+        base: Go to BASE
+        label: Account
+        sign_out: Sign out
+        sign_up_or_in: Sign up / Sign in
       footer_cookie_controls:
         accept_all: Accept all
         close_button: Close
@@ -3472,7 +3475,7 @@ en:
             attempts_exceeded: Maximum verification attempts exceeded. Please start over.
             code_required: Verification code is required.
             failed: Registration failed. Please try again.
-            invalid_code: Invalid verification code.
+            invalid_code: The verification code does not match. Please enter it again.
             sign_in_required: We could not complete registration. Please sign in to continue.
             success: Email address has been verified.
         new:
@@ -3531,7 +3534,7 @@ en:
             attempts_exceeded: Maximum verification attempts exceeded. Please start over.
             code_required: Verification code is required.
             failed: Registration could not be completed. Please start over.
-            invalid_code: Invalid verification code.
+            invalid_code: The verification code does not match. Please enter it again.
             passkey_required: Phone verified. Please register a passkey to continue.
             sign_in_required: We could not complete registration. Please sign in to continue.
             success: Phone number has been verified.

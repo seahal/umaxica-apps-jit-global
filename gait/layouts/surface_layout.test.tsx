@@ -60,6 +60,7 @@ const minimalChrome: SurfaceChrome = {
   footer_navigation: null,
   cookie_controls: cookieControls,
   theme_controls: themeControls,
+  account_navigation: null,
   copyright: "(c) Umaxica",
 };
 
@@ -115,6 +116,55 @@ describe("SurfaceLayout", () => {
     render({ ...minimalChrome, locale: "en" });
 
     expect(document.documentElement.lang).toBe("ja");
+  });
+
+  test("shows a signed-out relying party the way into sign-in in the header", () => {
+    render({
+      ...minimalChrome,
+      account_navigation: {
+        label: "Account",
+        signed_in: false,
+        links: [{ label: "Sign in", href: "/sign?ri=jp" }],
+      },
+    });
+
+    const account = within(screen.getByRole("banner")).getByRole("navigation", { name: "Account" });
+    expect(within(account).getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
+      "/sign?ri=jp",
+    );
+    expect(within(account).getAllByRole("link")).toHaveLength(1);
+  });
+
+  test("shows a signed-in relying party the way to Base and to sign out in the header", () => {
+    render({
+      ...minimalChrome,
+      account_navigation: {
+        label: "Account",
+        signed_in: true,
+        links: [
+          { label: "Go to BASE", href: "https://www.umaxica.app/dashboard?ri=jp" },
+          { label: "Sign out", href: "/sign/out/new?ri=jp" },
+        ],
+      },
+    });
+
+    const account = within(screen.getByRole("banner")).getByRole("navigation", { name: "Account" });
+    expect(
+      within(account)
+        .getAllByRole("link")
+        .map((link) => [link.textContent, link.getAttribute("href")]),
+    ).toEqual([
+      ["Go to BASE", "https://www.umaxica.app/dashboard?ri=jp"],
+      ["Sign out", "/sign/out/new?ri=jp"],
+    ]);
+  });
+
+  test("renders no account navigation where the server sent none", () => {
+    render(minimalChrome);
+
+    expect(
+      within(screen.getByRole("banner")).queryByRole("navigation", { name: "Account" }),
+    ).toBeNull();
   });
 
   test("omits theme and cookie chrome when the server sent none", () => {

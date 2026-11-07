@@ -28,8 +28,7 @@ module Jit
 
     test "validate! raises when service host is missing" do
       with_env(
-        "PRIVATE_AUTH_SERVICE_URL" => nil, "AUTH_CORPORATE_URL" => "id.com.example.test",
-        "PRIVATE_AUTH_STAFF_URL" => "id.org.example.test",
+        "PRIVATE_AUTH_SERVICE_URL" => nil, "PRIVATE_AUTH_STAFF_URL" => "id.org.example.test",
       ) do
         error = assert_raises(JitIdHostEnv::MissingHostError) { JitIdHostEnv.validate! }
 
@@ -39,8 +38,7 @@ module Jit
 
     test "validate! raises when staff host is missing" do
       with_env(
-        "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test", "AUTH_CORPORATE_URL" => "id.com.example.test",
-        "PRIVATE_AUTH_STAFF_URL" => nil,
+        "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test", "PRIVATE_AUTH_STAFF_URL" => nil,
       ) do
         error = assert_raises(JitIdHostEnv::MissingHostError) { JitIdHostEnv.validate! }
 
@@ -50,8 +48,7 @@ module Jit
 
     test "validate! passes when all hosts are present" do
       with_env(
-        "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test", "AUTH_CORPORATE_URL" => "id.com.example.test",
-        "PRIVATE_AUTH_STAFF_URL" => "id.org.example.test",
+        "PRIVATE_AUTH_SERVICE_URL" => "id.app.example.test", "PRIVATE_AUTH_STAFF_URL" => "id.org.example.test",
       ) do
         assert_nil JitIdHostEnv.validate!
       end
@@ -60,14 +57,11 @@ module Jit
     test "validate! reports every missing host" do
       with_env(
         "PRIVATE_AUTH_SERVICE_URL" => nil,
-        "PRIVATE_AUTH_CORPORATE_URL" => nil,
-        "AUTH_CORPORATE_URL" => nil,
         "PRIVATE_AUTH_STAFF_URL" => nil,
       ) do
         error = assert_raises(JitIdHostEnv::MissingHostError) { JitIdHostEnv.validate! }
 
         assert_includes error.message, "PRIVATE_AUTH_SERVICE_URL"
-        assert_includes error.message, "AUTH_CORPORATE_URL"
         assert_includes error.message, "PRIVATE_AUTH_STAFF_URL"
       end
     end

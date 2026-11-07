@@ -43,6 +43,28 @@ scaffolding, a method rename and `PreferenceSelect` synchronization. They do not
 the three persistence units and must not be used as acceptance evidence for this redesign without
 rechecking their cited tests in the implementation work.
 
+## Open defect: region overlay overrides the saved language
+
+Recorded 2026-11-07 during the two.md acceptance run; the owner assigned the fix to this redesign
+(five.md) instead of the two.md acceptance work. Not fixed.
+
+- Observed: on `https://www.umaxica.app/preference/language/edit`, `?ri=jp` renders Japanese even
+  when English is saved, and `?ri=us` renders English even when Japanese is saved. A request without
+  `ri` (for example the Auth `/social/google/callback`) uses the saved language.
+- Cause: `PreferenceRequestOverlay#overlay_language`
+  (`app/controllers/concerns/preference_request_overlay.rb`) resolves `lx`, then the language
+  inferred from `ri` (`jp` → `ja`, `us` → `en`), then the saved `Actor.preferences.language`.
+- Conflict: the Accepted `adr/localization-preference-flow.md` orders language as `?lx`, then the
+  explicitly saved language, then `?ri` seeding only for users with no language set, then the
+  default `ja`. The code places `ri` above the saved language.
+- Design input: the `explicit_fields` marker that told a saved language from a default was removed
+  by the WU-7 cutover, so the fix has to define what counts as a saved language in the new shape
+  (for example, a language present in the verified Preference JWT) and check whether any writer
+  stores a region-inferred language as if it were chosen.
+- Acceptance for the fix: with a saved language, both `?ri=jp` and `?ri=us` render the saved
+  language on Base, Auth and Visa; `?lx` still overrides for that request; without a saved language,
+  `ri` still seeds the language; covered through public requests.
+
 ## Handoff
 
 The detailed C5 list, C9.1 implementation state and C9.2 ADR conflicts are copied into the

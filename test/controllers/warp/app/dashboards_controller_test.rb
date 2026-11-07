@@ -93,6 +93,23 @@ class Warp::App::DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "warp/app/dashboards/show", inertia_component
     assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_equal(
+      {
+        "label" => I18n.t("layouts.shared.account_navigation.label"),
+        "signed_in" => true,
+        "links" => [
+          {
+            "label" => I18n.t("layouts.shared.account_navigation.base"),
+            "href" => base_app_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          },
+          {
+            "label" => I18n.t("layouts.shared.account_navigation.sign_out"),
+            "href" => new_warp_app_sign_out_path(ri: "jp"),
+          },
+        ],
+      },
+      inertia_props.fetch("chrome").fetch("account_navigation"),
+    )
   end
 
   test "anonymous direct dashboard request returns 404 without redirect" do
@@ -403,8 +420,7 @@ class Warp::App::DashboardsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

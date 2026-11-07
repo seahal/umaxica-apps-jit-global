@@ -102,8 +102,8 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
       base.get(new_base_app_identity_totp_path(ri: "jp"), headers: headers)
     end
 
-    assert_equal 200, base.response.status
-    assert_equal "strict-origin", base.response.headers["Referrer-Policy"]
+    assert_equal [200, "strict-origin"],
+                 [base.response.status, base.response.headers["Referrer-Policy"]]
     csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_difference("ClientAuthAdmissionBinding.count", 1) do
       base.post(base_app_identity_totps_path(ri: "jp"), params: { authenticity_token: csrf }, headers: headers)
@@ -151,8 +151,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
       ),
     )
 
-    assert_equal 400, visa.response.status
-    assert_nil binding.reload.base_confirmed_at
+    assert_equal [400, nil], [visa.response.status, binding.reload.base_confirmed_at]
     root_headers =
       begin
         rp_headers = as_user_headers(actor, host: base_host, session_public_id: token.public_id)

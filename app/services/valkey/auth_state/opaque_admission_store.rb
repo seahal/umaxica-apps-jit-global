@@ -12,6 +12,7 @@ module Valkey
       CODE_BYTES = 32
       CODE_TTL = 60.seconds
       VERSION = 1
+      ACTOR_SURFACES = { "client" => "app", "operator" => "org" }.freeze
       PURPOSES = %w(
         authentication_handoff authentication_result
         invitation_handoff invitation_result
@@ -193,6 +194,8 @@ module Valkey
         purpose = purpose.to_s
         raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
 
+        validate_actor_surface!(actor_type:, surface:)
+
         raw = raw_code.to_s.presence || SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
         reference = reference.to_s.presence || SecureRandom.uuid
         raise ArgumentError, "admission reference is blank" if reference.blank?
@@ -239,6 +242,8 @@ module Valkey
                              ttl: CODE_TTL, now: Time.current, allow_consumed: false)
         purpose = purpose.to_s
         raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
+
+        validate_actor_surface!(actor_type:, surface:)
 
         raw = SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
         payload = {
@@ -287,6 +292,8 @@ module Valkey
                              raw_code:, ttl: CODE_TTL, now: Time.current)
         purpose = purpose.to_s
         raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
+
+        validate_actor_surface!(actor_type:, surface:)
         raise ArgumentError, "admission code is blank" if raw_code.to_s.blank?
 
         payload = {
@@ -333,6 +340,14 @@ module Valkey
       rescue JSON::ParserError => e
         raise Umaxica::Valkey::SerializationError, "admission payload is corrupt", cause: e
       end
+
+      def validate_actor_surface!(actor_type:, surface:)
+        expected_surface = ACTOR_SURFACES[actor_type.to_s]
+        return if expected_surface == surface.to_s
+
+        raise ArgumentError, "unsupported admission actor/surface: #{actor_type.inspect}/#{surface.inspect}"
+      end
+      private :validate_actor_surface!
 
       # Reads a server-side result by its non-authorizing lookup reference. The
       # reference never contains the raw code; the receiver obtains the same

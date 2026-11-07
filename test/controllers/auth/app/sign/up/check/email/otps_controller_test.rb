@@ -800,6 +800,152 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_includes response.body, I18n.t("sign.app.registration.email.update.invalid_code")
   end
 
+  test "resend rotates the email code and registered destinations keep the same response" do
+    clear_enqueued_jobs
+    address = "email-resend-#{SecureRandom.hex(8)}@example.test"
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           :client_email => { raw_address: address, confirm_policy: "1" },
+           "cf-turnstile-response" => "test",
+         }, headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    email = ClientEmail.find(cycle.pending_contact_id)
+    transaction = ClientEmailCeremonyTransaction.find_by!(email_candidate_ref: email.public_id)
+    initial_job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    initial_delivery = ActiveJob::Arguments.deserialize(initial_job.fetch(:args)).last.fetch(:params)
+    old_code = OutboundSensitivePayload.decrypt_email_otp(initial_delivery.fetch(:encrypted_hotp_token))
+    initial_generation = transaction.otp_generation
+
+    get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
+
+    assert_response :success
+    resend = inertia_props.fetch("otp_resend")
+
+    assert_equal @flow_binding, resend.fetch("state")
+    resend_uri = URI.parse(resend.fetch("endpoint"))
+
+    assert_equal auth_app_sign_up_check_email_otp_path, resend_uri.path
+    assert_equal @flow_binding, Rack::Utils.parse_query(resend_uri.query).fetch("fb")
+    initial_delivery_count = enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: @headers
+
+    assert_response :too_many_requests
+    cooldown_retry_after = response.parsed_body.fetch("retry_after")
+
+    assert_operator cooldown_retry_after, :>, 0
+    assert_equal initial_delivery_count,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    resend_at = email.otp_last_sent_at + EmailOtpPolicy::SEND_COOLDOWN + 1.second
+    ClientEmail.stub(:database_now, resend_at) do
+      post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: @headers
+    end
+
+    assert_response :success
+    assert_equal({ "resendable" => true, "retry_after" => 0 }, response.parsed_body)
+    assert_equal initial_delivery_count + 1,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    assert_not_equal initial_generation, transaction.reload.otp_generation
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: old_code }, "cf-turnstile-response" => "test" }, headers: @headers
+
+    assert_response :unprocessable_content
+    wrong_props = inertia_props
+
+    assert_equal [I18n.t("sign.app.registration.email.update.invalid_code")], wrong_props.fetch("errors")
+    assert_equal "auth/app/sign/up/emails/edit", inertia_component
+    assert_equal "client_email", wrong_props.fetch("scope")
+    wrong_headers = response.headers.slice("Cache-Control", "Content-Type", "Vary")
+
+    competitor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
+    )
+    registered = competitor.client_emails.create!(
+      raw_address: address,
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
+    )
+    row_facts = [email.reload.attributes, cycle.reload.attributes, contact_owner_for_test(email).reload.attributes,
+                 competitor.reload.attributes, registered.reload.attributes,]
+    delivery_count_before_registered_code =
+      enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: "123456" }, "cf-turnstile-response" => "test" }, headers: @headers
+
+    assert_response :unprocessable_content
+    registered_props = inertia_props
+
+    assert_equal [I18n.t("sign.app.registration.email.update.invalid_code")], registered_props.fetch("errors")
+    assert_equal wrong_props.fetch("errors"), registered_props.fetch("errors")
+    assert_equal "auth/app/sign/up/emails/edit", inertia_component
+    assert_equal "client_email", registered_props.fetch("scope")
+    assert_equal wrong_headers, response.headers.slice("Cache-Control", "Content-Type", "Vary")
+    assert_equal row_facts,
+                 [email.reload.attributes, cycle.reload.attributes, contact_owner_for_test(email).reload.attributes,
+                  competitor.reload.attributes, registered.reload.attributes,]
+    assert_equal delivery_count_before_registered_code,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    post auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+         params: { state: resend.fetch("state") }, as: :json, headers: @headers
+
+    assert_response :too_many_requests
+    assert_not response.parsed_body.fetch("resendable")
+    assert_operator response.parsed_body.fetch("retry_after"), :>, 0
+    assert_equal delivery_count_before_registered_code,
+                 enqueued_jobs.count { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+  end
+
+  test "resending an email code rejects the old code and accepts the new code" do
+    clear_enqueued_jobs
+    address = "email-resend-accepted-#{SecureRandom.hex(8)}@example.test"
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           :client_email => { raw_address: address, confirm_policy: "1" },
+           "cf-turnstile-response" => "test",
+         }, headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    email = ClientEmail.find(cycle.pending_contact_id)
+    initial_job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    initial_delivery = ActiveJob::Arguments.deserialize(initial_job.fetch(:args)).last.fetch(:params)
+    old_code = OutboundSensitivePayload.decrypt_email_otp(initial_delivery.fetch(:encrypted_hotp_token))
+
+    get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
+
+    assert_response :success
+    resend = inertia_props.fetch("otp_resend")
+    resend_at = email.otp_last_sent_at + EmailOtpPolicy::SEND_COOLDOWN + 1.second
+    ClientEmail.stub(:database_now, resend_at) do
+      post resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers: @headers
+    end
+
+    assert_response :success
+    resent_job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+    resent_delivery = ActiveJob::Arguments.deserialize(resent_job.fetch(:args)).last.fetch(:params)
+    new_code = OutboundSensitivePayload.decrypt_email_otp(resent_delivery.fetch(:encrypted_hotp_token))
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: old_code }, "cf-turnstile-response" => "test" }, headers: @headers
+
+    assert_response :unprocessable_content
+    assert_includes response.body, I18n.t("sign.app.registration.email.update.invalid_code")
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: new_code }, "cf-turnstile-response" => "test" }, headers: @headers
+
+    assert_response :redirect
+  end
+
   test "patch with repeated invalid otp attempts locks the flow" do
     clear_enqueued_jobs
     post auth_app_sign_up_email_url(ri: "jp"),
@@ -1135,8 +1281,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

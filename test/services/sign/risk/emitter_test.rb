@@ -96,12 +96,6 @@ module Sign
         ENV["RISK_ENFORCEMENT_ENABLED"] = original_enabled
       end
 
-      test "retired visitor actor input is rejected without writing an occurrence" do
-        assert_no_difference ["ClientOccurrence.count", "OperatorOccurrence.count", "VisitorOccurrence.count"] do
-          assert_raises(ArgumentError) { SignRiskEmitter.emit("auth_failed", visitor_id: 123) }
-        end
-      end
-
       test "emit does nothing without actor id" do
         original_disabled = ENV["RISK_ENFORCEMENT_DISABLED"]
         original_enabled = ENV["RISK_ENFORCEMENT_ENABLED"]

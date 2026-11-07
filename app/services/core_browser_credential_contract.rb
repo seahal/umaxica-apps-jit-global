@@ -96,8 +96,8 @@ module CoreBrowserCredentialContract
   def core_jwt_issuer_id(resource_type)
     case resource_type
     when "operator" then "surface:CORE_ORG"
-    when "visitor" then "surface:CORE_COM"
-    else "surface:CORE_APP"
+    when "client" then "surface:CORE_APP"
+    else raise ArgumentError, "unsupported Core browser resource type: #{resource_type.inspect}"
     end
   end
 

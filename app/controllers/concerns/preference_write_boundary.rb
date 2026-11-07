@@ -23,6 +23,7 @@ module PreferenceWriteBoundary
   ).freeze
   ANONYMOUS_STORED_DISPLAY_TYPES = (ANONYMOUS_DISPLAY_TYPES + [:region]).freeze
   COOKIE_CONSENT_FIELDS = %i(consented functional performant targetable).freeze
+  COOKIE_CONSENT_VALUES = [true, false].freeze
   REGIONAL_DISPLAY_DEFAULTS = {
     "jp" => { language: "ja", date_format: "iso", time_format: "24", currency: "jpy" }.freeze,
     "us" => { language: "en", date_format: "us", time_format: "12", currency: "usd" }.freeze,
@@ -156,8 +157,27 @@ module PreferenceWriteBoundary
     raw_binding = cookies[PreferenceBrowserBinding::COOKIE_NAME]
     binding_was_valid = PreferenceBrowserBinding.valid_value?(raw_binding)
     binding_value = raw_binding if realm_binding_write?(normalized) && binding_was_valid
-    issuance = nil
+    issuance = persist_app_org_preference!(
+      context:, realm:, normalized:, token_payload:, binding_value:, binding_was_valid:,
+      authorization:,
+    )
+
+    emit_anonymous_realm_token!(issuance)
+    write_browser_binding_cookie(binding_value, expires_at: issuance.expires_at) if binding_value
+    clear_retired_preference_cookies!(clear_binding: authorization.fetch(:operation) == :reset)
+    issuance
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished,
+         ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved, IOError, SystemCallError => e
+    log_app_org_preference_write_failure(operation, e, actor_committed: actor_committed)
+    raise PreferenceBase::ResolutionError, "Preference persistence failed"
+  rescue JitSecurityJwtRegistry::ConfigurationError => e
+    raise_preference_resolution_error!(:signing_configuration, e)
+  end
+
+  def persist_app_org_preference!(context:, realm:, normalized:, token_payload:, binding_value:,
+                                  binding_was_valid:, authorization:)
     preference_class = context.fetch(:preference_model)
+    issuance = nil
 
     with_realm_setting_connection(preference_class) do
       preference_class.transaction do
@@ -182,16 +202,7 @@ module PreferenceWriteBoundary
       end
     end
 
-    emit_anonymous_realm_token!(issuance)
-    write_browser_binding_cookie(binding_value, expires_at: issuance.expires_at) if binding_value
-    clear_retired_preference_cookies!(clear_binding: authorization.fetch(:operation) == :reset)
     issuance
-  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotEstablished,
-         ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved, IOError, SystemCallError => e
-    log_app_org_preference_write_failure(operation, e, actor_committed: actor_committed)
-    raise PreferenceBase::ResolutionError, "Preference persistence failed"
-  rescue JitSecurityJwtRegistry::ConfigurationError => e
-    raise_preference_resolution_error!(:signing_configuration, e)
   end
 
   def normalize_anonymous_realm_submission(submitted, operation)
@@ -205,7 +216,23 @@ module PreferenceWriteBoundary
     unsupported = values.keys.map(&:to_sym) - allowed
     raise ArgumentError, "unsupported Preference fields: #{unsupported.sort.join(", ")}" if unsupported.any?
 
+    normalized = normalize_anonymous_realm_values(values)
+
+    raise ArgumentError, "empty Preference save" if normalized.empty?
+
+    normalized.freeze
+  end
+
+  def normalize_anonymous_realm_values(values)
     normalized = {}
+    normalize_anonymous_display_values!(values, normalized)
+    normalize_anonymous_region!(values, normalized)
+    normalize_anonymous_cookie_consent!(values, normalized)
+    normalize_anonymous_web_push!(values, normalized)
+    normalized
+  end
+
+  def normalize_anonymous_display_values!(values, normalized)
     ANONYMOUS_DISPLAY_TYPES.each do |field|
       next unless values.key?(field)
 
@@ -216,42 +243,44 @@ module PreferenceWriteBoundary
 
       normalized[field] = value
     end
+  end
 
-    if values.key?(:region)
-      region = values.fetch(:region)
-      region = region.downcase if region.is_a?(String)
-      regional_defaults =
-        REGIONAL_DISPLAY_DEFAULTS.fetch(region) do
-          raise ArgumentError, "unsupported Preference region: #{region.inspect}"
-        end
-      raise ArgumentError, "region save cannot include other Preference fields" if normalized.any? ||
-        (values.keys.map(&:to_sym) - [:region]).any?
+  def normalize_anonymous_region!(values, normalized)
+    return unless values.key?(:region)
 
-      normalized[:region] = region
-      normalized.merge!(regional_defaults)
-    end
-
-    consent_fields = values.keys.map(&:to_sym) & COOKIE_CONSENT_FIELDS
-    if consent_fields.any?
-      raise ArgumentError,
-            "cookie consent requires all four fields" unless consent_fields.sort == COOKIE_CONSENT_FIELDS.sort
-      unless COOKIE_CONSENT_FIELDS.all? { |field| [true, false].include?(values.fetch(field)) }
-        raise ArgumentError, "cookie consent values must be booleans"
+    region = values.fetch(:region)
+    region = region.downcase if region.is_a?(String)
+    regional_defaults =
+      REGIONAL_DISPLAY_DEFAULTS.fetch(region) do
+        raise ArgumentError, "unsupported Preference region: #{region.inspect}"
       end
+    raise ArgumentError, "region save cannot include other Preference fields" if normalized.any? ||
+      (values.keys.map(&:to_sym) - [:region]).any?
 
-      COOKIE_CONSENT_FIELDS.each { |field| normalized[field] = values.fetch(field) }
+    normalized[:region] = region
+    normalized.merge!(regional_defaults)
+  end
+
+  def normalize_anonymous_cookie_consent!(values, normalized)
+    consent_fields = values.keys.map(&:to_sym) & COOKIE_CONSENT_FIELDS
+    return unless consent_fields.any?
+
+    raise ArgumentError,
+          "cookie consent requires all four fields" unless consent_fields.sort == COOKIE_CONSENT_FIELDS.sort
+    unless COOKIE_CONSENT_FIELDS.all? { |field| COOKIE_CONSENT_VALUES.include?(values.fetch(field)) }
+      raise ArgumentError, "cookie consent values must be booleans"
     end
 
-    if values.key?(:web_push)
-      web_push = values.fetch(:web_push)
-      raise ArgumentError, "invalid Web Push option" unless %w(enabled disabled).include?(web_push)
+    COOKIE_CONSENT_FIELDS.each { |field| normalized[field] = values.fetch(field) }
+  end
 
-      normalized[:web_push] = web_push
-    end
+  def normalize_anonymous_web_push!(values, normalized)
+    return unless values.key?(:web_push)
 
-    raise ArgumentError, "empty Preference save" if normalized.empty?
+    web_push = values.fetch(:web_push)
+    raise ArgumentError, "invalid Web Push option" unless %w(enabled disabled).include?(web_push)
 
-    normalized.freeze
+    normalized[:web_push] = web_push
   end
 
   def validate_base_preference_actor!(actor, realm)

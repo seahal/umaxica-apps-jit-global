@@ -8,6 +8,8 @@
 module OidcAuthorizationResultPost
   extend ActiveSupport::Concern
 
+  include RegisteredRpFormTargets
+
   public
 
   def create
@@ -183,9 +185,18 @@ module OidcAuthorizationResultPost
 
   def render_authorization_continuation_form!(token)
     apply_base_browser_continuation_headers!
+    allow_registered_rp_form_targets!(realm: oidc_result_realm, uri_kind: :callback)
     response.headers["Referrer-Policy"] = "strict-origin"
     render template: "visa/shared/authorization_continuation", layout: false,
            locals: { continuation: token, action_url: authorization_create_path }
+  end
+
+  def oidc_result_realm
+    case oidc_result_surface
+    when "app" then "client"
+    when "org" then "operator"
+    else raise ArgumentError, "unsupported OIDC surface"
+    end
   end
 
   def validate_authorization_start_parameters!
@@ -477,7 +488,6 @@ module OidcAuthorizationResultPost
   def current_resource_for_oidc_authorization
     case oidc_result_surface
     when "app" then current_client
-    when "com" then current_visitor
     when "org" then current_operator
     else raise ArgumentError, "unsupported OIDC surface"
     end

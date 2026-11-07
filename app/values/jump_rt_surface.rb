@@ -4,33 +4,24 @@
 module JumpRtSurface
   module_function
 
-  # Jump RT issuer capability is exactly these sixteen logical namespaces. It is deliberately
+  # Jump RT issuer capability is limited to the active app/org namespaces and Palm app. It is deliberately
   # separate from JitSecurityJwtRegistry::SURFACE_NAMESPACES, which also carries non-Jump issuers.
   # Each issuer identity comes from the existing public surface setting; there is no Jump-specific
   # issuer-origin setting.
   ISSUER_ORIGIN_ENV = {
     "AUTH_APP" => "PUBLIC_AUTH_SERVICE_URL",
-    "AUTH_COM" => "PUBLIC_AUTH_CORPORATE_URL",
     "AUTH_ORG" => "PUBLIC_AUTH_STAFF_URL",
     "BASE_APP" => "PUBLIC_BASE_SERVICE_URL",
-    "BASE_COM" => "PUBLIC_BASE_CORPORATE_URL",
     "BASE_ORG" => "PUBLIC_BASE_STAFF_URL",
     "VISA_APP" => "PUBLIC_VISA_SERVICE_URL",
-    "VISA_COM" => "PUBLIC_VISA_CORPORATE_URL",
     "VISA_ORG" => "PUBLIC_VISA_STAFF_URL",
     "CORE_APP" => "PUBLIC_CORE_SERVICE_URL",
-    "CORE_COM" => "PUBLIC_CORE_CORPORATE_URL",
     "CORE_ORG" => "PUBLIC_CORE_STAFF_URL",
     "WARP_APP" => "PUBLIC_WARP_SERVICE_URL",
-    "WARP_COM" => "PUBLIC_WARP_CORPORATE_URL",
     "WARP_ORG" => "PUBLIC_WARP_STAFF_URL",
     "PALM_APP" => "PUBLIC_PALM_SERVICE_URL",
   }.freeze
-  BOOT_HOST_FIELDS = {
-    "VISA_APP" => :visa_service,
-    "VISA_COM" => :visa_corporate,
-    "VISA_ORG" => :visa_staff,
-  }.freeze
+  BOOT_HOST_FIELDS = { "VISA_APP" => :visa_service, "VISA_ORG" => :visa_staff }.freeze
   ISSUER_NAMESPACES = ISSUER_ORIGIN_ENV.keys.freeze
 
   JWKS_PATH = "/.well-known/jwks.json"
@@ -76,7 +67,6 @@ module JumpRtSurface
     surface =
       case controller_class_name.to_s
       when /\A\w+::App::/ then "APP"
-      when /\A\w+::Com::/ then "COM"
       when /\A\w+::Org::/ then "ORG"
       end
     if service.nil? || surface.nil?

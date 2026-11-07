@@ -15,6 +15,13 @@ module EmailOtpResponseTiming
     ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
   end
 
+  def with_otp_verification_response_timing
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    yield
+  ensure
+    ensure_email_auth_verification_elapsed(started_at, code: submitted_otp_verification_code)
+  end
+
   private
 
   def ensure_min_elapsed(start_time, target_seconds = TIMING_PROTECTION_SECONDS)
@@ -27,6 +34,15 @@ module EmailOtpResponseTiming
     return unless code.is_a?(String) && code.match?(/\A[0-9]{6}\z/)
 
     ensure_min_elapsed(start_time, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
+  end
+
+  def submitted_otp_verification_code
+    %i(client_email user_email client_telephone user_telephone).each do |scope|
+      code = params.dig(scope, :pass_code)
+      return code if code.present?
+    end
+
+    nil
   end
 
   def perform_dummy_otp_generation

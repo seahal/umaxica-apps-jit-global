@@ -148,17 +148,6 @@ module AuthenticationHarness
     )
   end
 
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    authenticated_resource_headers(
-      visitor,
-      host: host,
-      headers: headers,
-      session_public_id: session_public_id,
-      resource_type: "visitor",
-      session_header: "X-TEST-CURRENT-RESOURCE",
-    )
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -397,8 +386,7 @@ module AuthenticationHarness
 
   def create_base_rp_test_session(client_id:, resource:, root_token:)
     client = OidcClientRegistry.find!(client_id)
-    device_session = root_token.device_session_record!
-    root_token.rotate_refresh_token! unless device_session.current_refresh_token_id == root_token.id
+    root_token.rotate_refresh_token! unless root_token.device_session_record!.current_refresh_token_id == root_token.id
     grant_class, owner_column =
       case root_token
       when ClientToken then [OpAppGrant, :client_token_id]
@@ -622,12 +610,11 @@ module AuthenticationHarness
         "AUTH"
       end
     surface =
-      if resource_type == "operator" || normalized.include?(".org") || normalized.include?("org.")
-        "ORG"
-      elsif resource_type == "visitor" || normalized.include?(".com") || normalized.include?("com.")
-        "COM"
+      case resource_type.to_s
+      when "operator", "staff" then "ORG"
+      when "client" then "APP"
       else
-        "APP"
+        raise ArgumentError, "unsupported test resource type: #{resource_type.inspect}"
       end
     "surface:#{service}_#{surface}"
   end

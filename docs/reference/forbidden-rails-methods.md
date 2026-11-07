@@ -91,6 +91,13 @@ Reason:
 
 Use the correct API, JSON, or browser controller boundary instead of disabling protection locally.
 
+The Visa APP and ORG OAuth revocation leaves are protocol endpoints authenticated by registered
+client credentials. They inherit directly from `ActionController::API`, which does not install the
+browser forgery-protection callback. This is limited to
+`Visa::App::Oauth::RevocationsController` and `Visa::Org::Oauth::RevocationsController`; it does not
+authorize cookie-based mutation and does not extend to their realm's other OAuth endpoints. Browser
+logout confirmation remains forgery-protected.
+
 ## Models
 
 ### `belongs_to optional: true` And `required: false`

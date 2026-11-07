@@ -57,7 +57,7 @@ they must be unroutable after migration.
 
 ## Current security-lock recovery scope
 
-The APP/COM Base `/identity/recovery/session` entry is email OTP re-entry for an in-force,
+The APP Base `/identity/recovery/session` entry is email OTP re-entry for an in-force,
 visible `security_lock` whose release mode is `verification_required`. It requires an effective
 email binding and the permitted verified email status. Unknown destinations and unbound
 candidates take the existing dummy-response path and cannot receive a recovery ceremony.

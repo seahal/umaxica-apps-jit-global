@@ -7,8 +7,9 @@ require "test_helper"
 #
 # Global and Publishing policy roots declare `DefaultNoStore` once and prepend its callback, so every
 # controller beneath them starts from `Cache-Control: no-store` before any callback can end the
-# request. Regional roots (Core, Palm, Warp) are outside the policy. These assertions check policy
-# ownership only; they do not assert that excluded roots never send `no-store`.
+# request. Standalone protocol API leaves may explicitly opt into the same policy. Regional roots
+# (Core, Palm, Warp) are outside it. These assertions check policy ownership only; they do not assert
+# that excluded roots never send `no-store`.
 module Security
   module Invariants
     class DefaultNoStorePolicyInvariantTest < ActiveSupport::TestCase
@@ -50,7 +51,13 @@ module Security
         Help::Org::BareController,
         Visa::App::BareController,
         Visa::Org::BareController,
+        Visa::App::Api::V0::SensitiveAdmissionSessionsController,
+        Visa::App::Api::V0::SensitiveAdmissionsController,
         Visa::App::Oauth::TokensController,
+        Visa::App::Oauth::RevocationsController,
+        Visa::Org::Api::V0::SensitiveAdmissionSessionsController,
+        Visa::Org::Api::V0::SensitiveAdmissionsController,
+        Visa::Org::Oauth::RevocationsController,
         Auth::App::Apple::NotificationsController,
         Base::Org::Oidc::ClosuresController,
         Base::Org::Api::V0::TechCapabilityChecksController,

@@ -640,7 +640,6 @@ module VerificationBase
 
   def current_verification_actor
     return current_operator if actor_operator? && respond_to?(:current_operator)
-    return current_visitor if respond_to?(:current_visitor)
     return current_client if respond_to?(:current_client)
 
     nil
@@ -699,11 +698,10 @@ module VerificationBase
 
   def actor_dashboard_path(**args)
     surface = bootstrap_pt_surface
-    raise ArgumentError, "unsupported verification surface" unless %w(app com org).include?(surface)
+    raise ArgumentError, "unsupported verification surface" unless %w(app org).include?(surface)
 
     case surface
     when "app" then base_app_dashboard_path(**args)
-    when "com" then base_com_dashboard_path(**args)
     when "org" then base_org_dashboard_path(**args)
     end
   end

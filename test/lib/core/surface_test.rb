@@ -43,22 +43,22 @@ class CoreSurfaceTest < ActiveSupport::TestCase
     assert_equal :dev, CoreSurface.detect(request)
   end
 
-  test "detect returns DEFAULT for unknown host" do
-    request = MockRequest.new("unknown.example.com")
+  test "detect returns unknown for an unrecognized host" do
+    request = MockRequest.new("unknown.example.test")
 
-    assert_equal :com, CoreSurface.detect(request)
+    assert_equal :unknown, CoreSurface.detect(request)
   end
 
-  test "detect returns DEFAULT for blank host" do
+  test "detect returns unknown for blank host" do
     request = MockRequest.new("")
 
-    assert_equal :com, CoreSurface.detect(request)
+    assert_equal :unknown, CoreSurface.detect(request)
   end
 
-  test "detect returns DEFAULT for nil host" do
+  test "detect returns unknown for nil host" do
     request = MockRequest.new(nil)
 
-    assert_equal :com, CoreSurface.detect(request)
+    assert_equal :unknown, CoreSurface.detect(request)
   end
 
   test "detect returns app for deeply nested app subdomain" do

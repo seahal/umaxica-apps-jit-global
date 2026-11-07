@@ -15,3 +15,7 @@ repository at commit `a92ef1c916464ae41fcc41453fca92f4fa6d2cd9`, path
 `test/fixtures/receiver-contract.json`, service version `0.3.0`, SHA-256
 `7f884dcc348ff61cd94643b4dfbc0c5e27caa21fbf570abed81084b59471339e`; see
 `evidence/2026-10-02-rails-receiver-followup-W8T4.md`.
+
+`jump_app_org_candidate_graph.json` is a local derivative of the pinned 0.4.0 production graph.
+It removes COM nodes and their incident edges for the APP/ORG return-policy comparison; it is not
+an upstream fixture or deployment evidence.

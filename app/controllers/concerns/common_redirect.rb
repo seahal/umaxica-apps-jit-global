@@ -131,18 +131,18 @@ module CommonRedirect
   def oidc_authorize_host_allowed?(host)
     allowed_hosts =
       %w(
-        PUBLIC_AUTH_SERVICE_URL PRIVATE_AUTH_CORPORATE_URL PRIVATE_AUTH_STAFF_URL
-        PUBLIC_BASE_SERVICE_URL PUBLIC_BASE_CORPORATE_URL PUBLIC_BASE_STAFF_URL
+        PUBLIC_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL
+        PUBLIC_BASE_SERVICE_URL PUBLIC_BASE_STAFF_URL
       ).filter_map do |key|
         Oidc::AcmeServiceOrigin.host_from(ENV.fetch(key)) || CommonRedirect.normalize_host(ENV.fetch(key))
       end
     allowed_hosts += %w(
-      auth.app.localhost auth.com.localhost auth.org.localhost
-      base.app.localhost base.com.localhost base.org.localhost
-      visa.app.localhost visa.com.localhost visa.org.localhost
+      auth.app.localhost auth.org.localhost
+      base.app.localhost base.org.localhost
+      visa.app.localhost visa.org.localhost
     )
     boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    allowed_hosts.concat([boot_hosts.visa_service.host, boot_hosts.visa_corporate.host, boot_hosts.visa_staff.host])
+    allowed_hosts.concat([boot_hosts.visa_service.host, boot_hosts.visa_staff.host])
     allowed_hosts.include?(CommonRedirect.normalize_host(host))
   end
 

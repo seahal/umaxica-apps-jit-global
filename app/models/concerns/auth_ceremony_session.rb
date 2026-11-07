@@ -317,7 +317,7 @@ module AuthCeremonySession
   # Explicit non-authority surface: these attributes must remain absent.
   def asserts_no_authority_api!
     %i(
-      identity_id user_id visitor_id staff_id aal amr role permission
+      identity_id user_id staff_id aal amr role permission
       base_browser_session_id rp_session_id oidc_client_id
       state nonce pkce_verifier code authorization_code access_token refresh_token
       sign_in sign_up sign_in_intent sign_up_intent

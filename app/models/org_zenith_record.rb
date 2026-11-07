@@ -6,6 +6,7 @@
 # this single connection owner.
 class OrgZenithRecord < ApplicationRecord
   self.abstract_class = true
+  self.strict_loading_by_default = true
 
   connects_to database: { writing: :org_zenith, reading: :org_zenith_replica }
 end

@@ -16,12 +16,12 @@ stateDiagram-v2
     verified --> verified: already_verified receipt before result deadline; not another consumption
     verified --> result_expired: result deadline elapsed
     note right of issued
-        App/com sign-in receipt, verification and resend use this model.
+        App sign-in receipt, verification and resend use this model.
         Delivery refuses stale generation, destination, code or binding before transport.
         Contact owner and Contact are locked before the OIDC parent and Auth session.
         Initial real-contact sign-in checks Source cooldown before issuing a generation.
         Verification and delivery recheck the Contact reference after those locks.
-        Independent app/com Ticket storage; DB time rechecked after Contact ownership locks.
+        Independent app Ticket storage; DB time rechecked after Contact ownership locks.
         Current surface, purpose, SID, parent and effective Contact facts required.
         Dummy generations cannot verify; Source OTP generations remain unchanged.
         Cancellation retains the terminal generation and refuses verification and delivery.

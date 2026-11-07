@@ -11,7 +11,7 @@ TelephoneCredentialRegistrationOtpDeliveryBindingValue =
         end
 
         surface, purpose, transaction_ref, candidate_ref, generation = otp_binding
-        unless %w(app com org).include?(surface) && purpose == "credential_registration" &&
+        unless %w(app org).include?(surface) && purpose == "credential_registration" &&
             candidate_ref.is_a?(String) && candidate_ref.encoding.ascii_compatible? && candidate_ref.valid_encoding? &&
             candidate_ref.match?(/\A[A-Za-z0-9_-]{1,21}\z/)
           raise ArgumentError, "invalid Telephone registration delivery binding"

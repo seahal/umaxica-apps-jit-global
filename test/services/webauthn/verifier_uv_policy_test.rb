@@ -51,6 +51,15 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
     end
   end
 
+  test "registration options reject the retired com authentication surface" do
+    assert_raises(Webauthn::Surface::UnknownSurfaceError) do
+      Webauthn::RegistrationVerifier.options_for(
+        config: @config, user_id: SecureRandom.urlsafe_base64(32), user_name: "user@example.com",
+        surface: :com,
+      )
+    end
+  end
+
   test "UV=false attestation is rejected at registration" do
     challenge = Base64.urlsafe_encode64(SecureRandom.random_bytes(32), padding: false)
     params = fake_attestation(@client, challenge: challenge, user_verified: false)

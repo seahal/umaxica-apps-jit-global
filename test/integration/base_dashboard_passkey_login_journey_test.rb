@@ -84,8 +84,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       target = URI.parse(response.location)
       target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       visa_host = visa_host_for_test_base_host(base_host)
-
-      assert_equal visa_host, target.host
+      visa_authorization_host = target.host
       visa_browser = open_session
       visa_browser.host!(visa_host)
       visa_browser.https!
@@ -99,8 +98,6 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         "#{name}=#{Rack::Utils.escape(value)}"
       end.join("; ")
       target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
-
-      assert_equal auth_host, target.host
       entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: entry_ref)
       flow = authorization_transaction_for_test(binding)
@@ -111,19 +108,18 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       automatic_relay_responses << ["GET", target.path, browser.response.status]
       auth_entry_target = URI.parse(browser.response.location)
 
-      assert_equal URI.parse(sign_in_entry_path).path, auth_entry_target.path
+      assert_equal [visa_host, auth_host, URI.parse(sign_in_entry_path).path],
+                   [visa_authorization_host, target.host, auth_entry_target.path]
       entry_params = Rack::Utils.parse_nested_query(auth_entry_target.query)
       entry_params.fetch("entry_ref")
       browser.get(auth_entry_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", auth_entry_target.path, browser.response.status]
       attach_target = URI.parse(browser.response.location)
 
-      assert_equal "/ceremony_bindings", attach_target.path
       browser.get(attach_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
       confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
-      assert_equal visa_host, confirmation_target.host
       confirmation_path = confirmation_target.path
       visa_browser.get(
         confirmation_target.request_uri, headers: {
@@ -133,12 +129,13 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       automatic_relay_responses << ["GET", confirmation_path, visa_browser.response.status]
       auth_target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
 
-      assert_equal auth_host, auth_target.host
+      assert_equal ["/ceremony_bindings", visa_host, auth_host],
+                   [attach_target.path, confirmation_target.host, auth_target.host]
       browser.host!(auth_host)
       browser.get(auth_target.request_uri, headers: NAVIGATION_HEADERS)
       automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
 
-      assert_equal URI.parse(auth_app_sign_in_path(ri: "jp")).path, URI.parse(browser.response.location).path
+      sign_in_target_path = URI.parse(browser.response.location).path
       browser.get(browser.response.location)
       automatic_relay_responses << ["GET", "/sign/in", browser.response.status]
 
@@ -152,7 +149,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         headers: headers, as: :json,
       )
 
-      assert_equal 200, browser.response.status
+      options_status = browser.response.status
       options = browser.response.parsed_body
       assertion = fake.get(
         challenge: options.fetch("options").fetch("challenge"),
@@ -165,7 +162,7 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
           }, headers: headers, as: :json,
         )
       end
-      assert_equal 200, browser.response.status
+      assert_equal [200, 200], [options_status, browser.response.status]
       browser.get(
         handoff_path, params: { ri: "jp" }, headers: {
           "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
@@ -176,7 +173,6 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       assert_equal 303, browser.response.status
       result_uri = URI.parse(browser.response.location)
 
-      assert_equal visa_host, result_uri.host
       visa_browser.host!(visa_host)
       visa_browser.https!
       assert_difference(-> { token_model.count }, 1) do
@@ -213,14 +209,15 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
       automatic_relay_responses << ["GET", result_uri.path, visa_browser.response.status]
       token = token_model.find_by!(public_id: flow.reload.browser_session_ref)
 
-      assert_equal "passkey", token.established_authentication_method
-      assert_not_nil token.root_login_established_at
-      assert_not_nil visa_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-      assert_nil browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_equal ["passkey", true, true, nil],
+                   [token.established_authentication_method, token.root_login_established_at.present?,
+                    visa_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].present?,
+                    browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY],]
       callback_uri = URI.parse(visa_browser.response.location)
       callback_uri = URI.parse(jump_rt_url_from_location_for_test(callback_uri.to_s))
 
-      assert_equal base_host, callback_uri.host
+      assert_equal [URI.parse(auth_app_sign_in_path(ri: "jp")).path, visa_host, base_host],
+                   [sign_in_target_path, result_uri.host, callback_uri.host]
       host!(base_host)
       https!
       protocol_browser = open_session

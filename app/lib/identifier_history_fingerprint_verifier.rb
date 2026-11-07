@@ -6,8 +6,8 @@ require "openssl"
 class IdentifierHistoryFingerprintVerifier
   FINGERPRINT_FORMAT = /\A\$argon2id\$v=19\$m=65536,t=3,p=4\$[A-Za-z0-9+\/]{22}\$[A-Za-z0-9+\/]{43}\z/
   LIVE_HMAC_KEY_NAMES = %w(
-    APP_EMAIL_ADDRESS_HMAC_KEY COM_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
-    APP_TELEPHONE_NUMBER_HMAC_KEY COM_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
+    APP_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
+    APP_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
   ).freeze
   private_constant :LIVE_HMAC_KEY_NAMES
 
@@ -44,10 +44,8 @@ class IdentifierHistoryFingerprintVerifier
 
       case [realm.to_s, channel.to_s]
       when ["app", "email"] then "APP_EMAIL_HISTORY_KEY"
-      when ["com", "email"] then "COM_EMAIL_HISTORY_KEY"
       when ["org", "email"] then "ORG_EMAIL_HISTORY_KEY"
       when ["app", "telephone"] then "APP_TELEPHONE_HISTORY_KEY"
-      when ["com", "telephone"] then "COM_TELEPHONE_HISTORY_KEY"
       when ["org", "telephone"] then "ORG_TELEPHONE_HISTORY_KEY"
       else raise ArgumentError, "unsupported history identifier domain"
       end

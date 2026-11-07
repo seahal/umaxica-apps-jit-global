@@ -36,7 +36,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     )
     current_browser = @base_browser
     12.times do
-      raise "Social admission stopped before a redirect" unless current_browser.response.redirect?
+      raise RuntimeError, "Social admission stopped before a redirect" unless current_browser.response.redirect?
 
       target = URI.parse(current_browser.response.location)
       if target.host == "jump.umaxica.net"
@@ -6551,8 +6551,7 @@ class SocialAuthLoginTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

@@ -5,12 +5,12 @@ require "test_helper"
 class RealmIdentifierEncryptionTest < ActiveSupport::TestCase
   test "realm derivation keeps ciphertext isolated even if configured key and salt values accidentally coincide" do
     names =
-      %w(APP COM ORG).flat_map do |prefix|
+      %w(APP ORG).flat_map do |prefix|
         ["#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY", "#{prefix}_ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT"]
       end
     original = names.index_with { |name| ENV.fetch(name) }
     names.each { |name| ENV[name] = "same-local-test-secret-value" }
-    providers = %w(app com org).index_with { |realm| RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm) }
+    providers = %w(app org).index_with { |realm| RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm) }
     providers.each do |realm, provider|
       ciphertext = ActiveRecord::Encryption.encryptor.encrypt("realm@example.com", key_provider: provider)
 
@@ -42,7 +42,7 @@ class RealmIdentifierEncryptionTest < ActiveSupport::TestCase
   end
 
   test "each realm keyring reads previous ciphertext and encrypts with only the current key" do
-    %w(app com org).each do |realm|
+    %w(app org).each do |realm|
       prefix = realm.upcase
       current_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"
       previous_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY_PREVIOUS"
@@ -68,6 +68,12 @@ class RealmIdentifierEncryptionTest < ActiveSupport::TestCase
         ENV[current_name] = old_current
         old_previous.nil? ? ENV.delete(previous_name) : ENV[previous_name] = old_previous
       end
+    end
+  end
+
+  test "COM and unsupported realms cannot select an identifier encryption keyring" do
+    [nil, "", "com", "visitor", "customer", "unknown"].each do |realm|
+      assert_raises(KeyError) { RealmIdentifierEncryptionKeyProvider.key_provider(realm:) }
     end
   end
 

@@ -49,7 +49,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not_equal OidcIssuer.for_resource_type("operator"), query["iss"],
                      "The iss parameter must identify this surface's issuer, not another surface's."
-    assert_not_equal OidcIssuer.for_resource_type("visitor"), query["iss"]
+    assert_raises(ArgumentError) { OidcIssuer.for_resource_type("visitor") }
   end
 
   test "fails for missing response_type" do
@@ -725,8 +725,7 @@ class OidcAuthorizeCoordinatorTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

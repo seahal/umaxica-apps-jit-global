@@ -114,19 +114,19 @@ module AuthorizationTokenClaims
   private_class_method :timestamp_value, :optional_claims
 
   # Returns default scopes based on resource type
-  # @param resource_type [String] 'client', 'operator', or 'visitor'
-  # @param resource [AuthorizationClient/AuthorizationOperator/AuthorizationVisitor] the authenticated resource
+  # @param resource_type [String] 'client' or 'operator'
+  # @param resource [AuthorizationClient/AuthorizationOperator] the authenticated resource
   # @return [Array<String>] list of scopes
   def resolve_scopes(resource_type, _resource)
     base_scopes = ["authenticated", "domain:#{resource_type}"]
 
     case resource_type.to_s
-    when "client", "visitor"
+    when "client"
       base_scopes + ["read:self", "write:self"]
     when "operator"
       base_scopes + ["read:org", "write:org"]
     else
-      base_scopes
+      raise ArgumentError, "unsupported authorization resource type: #{resource_type.inspect}"
     end
   end
   private_class_method :resolve_scopes

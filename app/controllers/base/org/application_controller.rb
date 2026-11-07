@@ -4,13 +4,6 @@
 module Base
   module Org
     class ApplicationController < ActionController::Base
-      PREFERENCE_WRITE_CONTEXT = {
-        surface_key: "base/org",
-        realm: "org",
-        preference_model: OrgPreference,
-        issuer_id: "preference_org",
-      }.freeze
-
       include ::OrgSecondPasskeyGate
       include ::FqdnAvailabilityGate
       include ::RateLimit
@@ -38,6 +31,13 @@ module Base
       include SurfaceRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
+
+      PREFERENCE_WRITE_CONTEXT = {
+        surface_key: "base/org",
+        realm: "org",
+        preference_model: OrgPreference,
+        issuer_id: "preference_org",
+      }.freeze
 
       AUTHENTICATION_MODE = :deny_all
       after_action :verify_private_action_authorized!

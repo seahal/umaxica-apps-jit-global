@@ -36,9 +36,9 @@ class PromotionalEmailUnsubscribeTokenTest < ActiveSupport::TestCase
     email = ClientEmail.new(public_id: "email_public_id")
 
     Rails.app.creds.stub(:option, "unsubscribe-secret_credential") do
-      visitor_token = PromotionalEmailUnsubscribeToken.generate(email, scope: :visitor)
+      operator_token = PromotionalEmailUnsubscribeToken.generate(email, scope: :operator)
 
-      assert_not PromotionalEmailUnsubscribeToken.valid?(email, visitor_token, scope: :client)
+      assert_not PromotionalEmailUnsubscribeToken.valid?(email, operator_token, scope: :client)
     end
   end
 

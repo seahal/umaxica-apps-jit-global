@@ -60,14 +60,11 @@ class IdentityStepUpCeremonyTransactionPurger
               eligible.each(&:delete_all)
               deleted += model.where(id: parent.id).delete_all
             end
-          rescue ActiveRecord::InvalidForeignKey => e
+          rescue ActiveRecord::InvalidForeignKey, ActiveRecord::StatementInvalid => e
             # A concurrent ceremony writer can add or retain a restrictive child after the
-            # eligibility snapshot. The transaction has already rolled back the child deletes;
-            # leave the complete cohort for the next retention pass.
-            raise unless foreign_key_restriction?(e)
-          rescue ActiveRecord::StatementInvalid => e
-            # PostgreSQL exposes RESTRICT failures as StatementInvalid with a PG::RestrictViolation
-            # cause on this Rails version. Treat that race exactly like ActiveRecord::InvalidForeignKey.
+            # eligibility snapshot. The transaction has rolled back the child deletes; leave the
+            # complete cohort for the next retention pass. PostgreSQL may wrap RESTRICT failures
+            # in StatementInvalid on this Rails version.
             raise unless foreign_key_restriction?(e)
           end
         end
@@ -89,35 +86,54 @@ class IdentityStepUpCeremonyTransactionPurger
   def eligible_children(relation)
     model = relation.klass
     cutoff = now - retention_period
-    if [ClientStepUpSession, OperatorStepUpSession].include?(model)
+    if step_up_session_model?(model)
       relation.where(model.arel_table[:discard_at].lteq(cutoff))
         .where(model.arel_table[:purge_eligible_at].lteq(now))
-    elsif [ClientAuthCeremonySession, OperatorAuthCeremonySession].include?(model)
-      expired = relation.where(model.arel_table[:expires_at].lteq(cutoff))
-      active = model.arel_table[:status_id].in(AuthCeremonySession::ACTIVE_STATUS_IDS)
-      completed = model.arel_table[:status_id].eq(AuthCeremonySession::STATUS_COMPLETED)
-        .and(model.arel_table[:completed_at].lteq(cutoff))
-      cancelled = model.arel_table[:status_id].in(
-        [
-          AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS,
-          AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS,
-        ],
-      ).and(model.arel_table[:cancelled_at].lteq(cutoff))
-      revoked = model.arel_table[:status_id].in(
-        [
-          AuthCeremonySession::STATUS_REPLACED,
-          AuthCeremonySession::STATUS_REVOKED,
-        ],
-      ).and(model.arel_table[:revoked_at].lteq(cutoff))
-      expired.where(active.or(completed).or(cancelled).or(revoked))
-    elsif [ClientPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
-           ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
-           IdentityPasskeyCeremonyCandidate,
-           OperatorPasskeyCeremonyCandidate,].include?(model)
-      relation.where(model.arel_table[:expires_at].lteq(cutoff))
-        .where(model.arel_table[:consumed_at].eq(nil).or(model.arel_table[:consumed_at].lteq(cutoff)))
+    elsif auth_ceremony_session_model?(model)
+      eligible_auth_ceremony_sessions(relation, model, cutoff)
+    elsif expirable_ceremony_model?(model)
+      eligible_expirable_ceremonies(relation, model, cutoff)
     else
       raise ArgumentError, "unsupported ceremony dependent"
     end
+  end
+
+  def step_up_session_model?(model)
+    [ClientStepUpSession, OperatorStepUpSession].include?(model)
+  end
+
+  def auth_ceremony_session_model?(model)
+    [ClientAuthCeremonySession, OperatorAuthCeremonySession].include?(model)
+  end
+
+  def expirable_ceremony_model?(model)
+    [ClientPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
+     ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
+     IdentityPasskeyCeremonyCandidate, OperatorPasskeyCeremonyCandidate,].include?(model)
+  end
+
+  def eligible_auth_ceremony_sessions(relation, model, cutoff)
+    expired = relation.where(model.arel_table[:expires_at].lteq(cutoff))
+    active = model.arel_table[:status_id].in(AuthCeremonySession::ACTIVE_STATUS_IDS)
+    completed = model.arel_table[:status_id].eq(AuthCeremonySession::STATUS_COMPLETED)
+      .and(model.arel_table[:completed_at].lteq(cutoff))
+    cancelled = model.arel_table[:status_id].in(
+      [
+        AuthCeremonySession::STATUS_CANCELLED_BEFORE_PROGRESS,
+        AuthCeremonySession::STATUS_CANCELLED_AFTER_PROGRESS,
+      ],
+    ).and(model.arel_table[:cancelled_at].lteq(cutoff))
+    revoked = model.arel_table[:status_id].in(
+      [
+        AuthCeremonySession::STATUS_REPLACED,
+        AuthCeremonySession::STATUS_REVOKED,
+      ],
+    ).and(model.arel_table[:revoked_at].lteq(cutoff))
+    expired.where(active.or(completed).or(cancelled).or(revoked))
+  end
+
+  def eligible_expirable_ceremonies(relation, model, cutoff)
+    relation.where(model.arel_table[:expires_at].lteq(cutoff))
+      .where(model.arel_table[:consumed_at].eq(nil).or(model.arel_table[:consumed_at].lteq(cutoff)))
   end
 end

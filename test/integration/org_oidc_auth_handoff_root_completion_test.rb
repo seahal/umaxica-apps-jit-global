@@ -143,7 +143,8 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.get(
           "/sign/oidc/handoff", params: { ri: "jp" },
                                 headers: auth_headers.merge(
-                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+                                  "Sec-Fetch-Site" => "same-origin",
                                 ),
         )
 
@@ -295,7 +296,8 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.get(
           "/sign/oidc/handoff", params: { ri: "jp" },
                                 headers: auth_headers.merge(
-                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+                                  "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document",
+                                  "Sec-Fetch-Site" => "same-origin",
                                 ),
         )
 

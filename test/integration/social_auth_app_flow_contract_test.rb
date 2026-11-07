@@ -4965,123 +4965,13 @@ class SocialAuthAppFlowContractTest
   # The Auth callback records the authenticated OIDC result on Visa. The browser reads the
   # continuation form with GET and submits its protected same-origin POST before the RP callback.
   def complete_social_oidc_visa_result!(target:, base_browser:, base_host:, visa_host:)
-    raise "unexpected Visa result target" unless target.host == visa_host && target.path == "/oidc/result"
-
-    base_browser.host!(visa_host)
-    base_browser.https!
-    base_browser.get(
-      target.request_uri, headers: {
-        "Host" => visa_host,
-        "Sec-Fetch-Mode" => "navigate",
-        "Sec-Fetch-Dest" => "document",
-        "Sec-Fetch-Site" => "cross-site",
-      },
-    )
-    raise RuntimeError, "Visa result did not render its POST continuation" unless base_browser.response.status == 200
-
-    form = Nokogiri::HTML(base_browser.response.body).at_css("form#visa-authorization-continuation-form")
-    raise RuntimeError, "Visa result continuation form is missing" unless form
-
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base_browser.post(
-      form["action"], params: fields, headers: {
-        "Host" => visa_host,
-        "Origin" => "https://#{visa_host}",
-        "Sec-Fetch-Site" => "same-origin",
-        "Sec-Fetch-Mode" => "navigate",
-        "Sec-Fetch-Dest" => "document",
-      },
-    )
-    raise RuntimeError, "Visa result continuation POST did not redirect" unless base_browser.response.redirect?
-
-    callback_uri = URI.parse(base_browser.response.location)
-    unless callback_uri.host == base_host
-      jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
-      raise "unexpected OIDC callback transport host" unless callback_uri.host == jump_host
-
-      result_token = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
-      issuer = JitSecurityJwtRegistry.surface("VISA_APP")
-      payload, = JWT.decode(
-        result_token,
-        JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{visa_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      callback_uri = URI.parse(payload.fetch("url"))
-    end
-    raise "unexpected OIDC callback path" unless callback_uri.host == base_host && callback_uri.path == "/oidc/callback"
-
-    base_cookie = base_browser.cookies.to_hash.map { |name, value| "#{name}=#{Rack::Utils.escape(value)}" }.join("; ")
-    base_headers = {
-      "Origin" => "https://#{base_host}",
-      "Sec-Fetch-Site" => "same-origin",
-      "Cookie" => base_cookie,
-      "HTTP_COOKIE" => base_cookie,
-    }
+    callback_uri = social_oidc_visa_callback_uri!(target:, base_browser:, base_host:, visa_host:)
+    base_headers = social_oidc_callback_headers(base_browser:, base_host:)
     protocol_browser = open_session
     protocol_browser.host!(base_host)
     protocol_browser.https!
-    token_requests = 0
-    transport =
-      Faraday::Adapter::Test::Stubs.new do |stub|
-        stub.post(/.*/) do |env|
-          token_requests += 1
-          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
-          outer_actor = Actor.context
-          executor_key = Rails.application.executor.active_key
-          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
-          begin
-            protocol_browser.host!(env.url.authority)
-            protocol_browser.https!(env.url.scheme == "https")
-            protocol_browser.post(
-              env.url.request_uri,
-              params: Rack::Utils.parse_query(env.body),
-              headers: { "Accept" => "application/json" },
-            )
-          ensure
-            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
-          end
-
-          assert_equal [true, true, 200], [
-            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
-            Actor.context.equal?(outer_actor),
-            protocol_browser.response.status,
-          ]
-          [protocol_browser.response.status, { "Content-Type" => "application/json" },
-           protocol_browser.response.body,]
-        end
-        stub.get(/.*/) do |env|
-          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
-          outer_actor = Actor.context
-          executor_key = Rails.application.executor.active_key
-          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
-          begin
-            protocol_browser.host!(env.url.authority)
-            protocol_browser.https!(env.url.scheme == "https")
-            protocol_browser.get(
-              env.url.request_uri,
-              headers: {
-                "Authorization" => env.request_headers["Authorization"],
-                "Accept" => "application/json",
-              }.compact,
-            )
-          ensure
-            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
-          end
-
-          assert_equal [true, true, 200], [
-            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
-            Actor.context.equal?(outer_actor),
-            protocol_browser.response.status,
-          ]
-          [protocol_browser.response.status, { "Content-Type" => "application/json" },
-           protocol_browser.response.body,]
-        end
-      end
+    token_requests = [0]
+    transport = social_oidc_token_transport(protocol_browser:, token_requests:)
     connection =
       Faraday.new do |builder|
         builder.request(:url_encoded)
@@ -5107,7 +4997,141 @@ class SocialAuthAppFlowContractTest
       cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
       cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,
     ]
-    assert_equal 1, token_requests
+    assert_equal 1, token_requests.fetch(0)
+  end
+
+  def social_oidc_visa_callback_uri!(target:, base_browser:, base_host:, visa_host:)
+    unless target.host == visa_host && target.path == "/oidc/result"
+      raise RuntimeError, "unexpected Visa result target"
+    end
+
+    base_browser.host!(visa_host)
+    base_browser.https!
+    base_browser.get(target.request_uri, headers: social_visa_navigation_headers(visa_host))
+    unless base_browser.response.status == 200
+      raise RuntimeError, "Visa result did not render its POST continuation"
+    end
+
+    form = Nokogiri::HTML(base_browser.response.body).at_css("form#visa-authorization-continuation-form")
+    raise RuntimeError, "Visa result continuation form is missing" unless form
+
+    base_browser.post(
+      form["action"],
+      params: social_visa_continuation_fields(form),
+      headers: social_visa_continuation_headers(visa_host),
+    )
+    unless base_browser.response.redirect?
+      raise RuntimeError, "Visa result continuation POST did not redirect"
+    end
+
+    callback_uri = resolve_social_oidc_callback_uri(base_browser.response.location, base_host:, visa_host:)
+    unless callback_uri.host == base_host && callback_uri.path == "/oidc/callback"
+      raise RuntimeError, "unexpected OIDC callback path"
+    end
+
+    callback_uri
+  end
+
+  def social_visa_navigation_headers(visa_host)
+    {
+      "Host" => visa_host,
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => "cross-site",
+    }
+  end
+
+  def social_visa_continuation_fields(form)
+    form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+  end
+
+  def social_visa_continuation_headers(visa_host)
+    {
+      "Host" => visa_host,
+      "Origin" => "https://#{visa_host}",
+      "Sec-Fetch-Site" => "same-origin",
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+    }
+  end
+
+  def resolve_social_oidc_callback_uri(location, base_host:, visa_host:)
+    callback_uri = URI.parse(location)
+    return callback_uri if callback_uri.host == base_host
+
+    jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+    raise RuntimeError, "unexpected OIDC callback transport host" unless callback_uri.host == jump_host
+
+    result_token = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
+    issuer = JitSecurityJwtRegistry.surface("VISA_APP")
+    payload, = JWT.decode(
+      result_token,
+      JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid),
+      true,
+      algorithms: ["ES384"],
+      verify_iss: true,
+      iss: "https://#{visa_host}",
+      verify_aud: true,
+      aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    URI.parse(payload.fetch("url"))
+  end
+
+  def social_oidc_callback_headers(base_browser:, base_host:)
+    base_cookie = base_browser.cookies.to_hash.map { |name, value| "#{name}=#{Rack::Utils.escape(value)}" }.join("; ")
+    {
+      "Origin" => "https://#{base_host}",
+      "Sec-Fetch-Site" => "same-origin",
+      "Cookie" => base_cookie,
+      "HTTP_COOKIE" => base_cookie,
+    }
+  end
+
+  def social_oidc_token_transport(protocol_browser:, token_requests:)
+    Faraday::Adapter::Test::Stubs.new do |stub|
+      stub.post(/.*/) do |env|
+        token_requests[0] += 1
+        social_oidc_token_response(protocol_browser, env:) do
+          protocol_browser.post(
+            env.url.request_uri,
+            params: Rack::Utils.parse_query(env.body),
+            headers: { "Accept" => "application/json" },
+          )
+        end
+      end
+      stub.get(/.*/) do |env|
+        social_oidc_token_response(protocol_browser, env:) do
+          protocol_browser.get(
+            env.url.request_uri,
+            headers: {
+              "Authorization" => env.request_headers["Authorization"],
+              "Accept" => "application/json",
+            }.compact,
+          )
+        end
+      end
+    end
+  end
+
+  def social_oidc_token_response(protocol_browser, env:)
+    outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+    outer_actor = Actor.context
+    executor_key = Rails.application.executor.active_key
+    outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+    begin
+      protocol_browser.host!(env.url.authority)
+      protocol_browser.https!(env.url.scheme == "https")
+      yield
+    ensure
+      ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+    end
+
+    assert_equal [true, true, 200], [
+      ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller),
+      Actor.context.equal?(outer_actor),
+      protocol_browser.response.status,
+    ]
+    [protocol_browser.response.status, { "Content-Type" => "application/json" }, protocol_browser.response.body]
   end
 
   def set_access_cookie(token)
@@ -5125,7 +5149,7 @@ class SocialAuthAppFlowContractTest
     if target.host == jump_host
       target, initial_rt = decode_social_jump_target!(target, issuer_namespace: "BASE_APP", issuer_host: base_host)
     end
-    raise "Visa authorization host mismatch" unless target.host == visa_host
+    raise RuntimeError, "Visa authorization host mismatch" unless target.host == visa_host
 
     base_browser.host!(visa_host)
     base_browser.https!
@@ -5143,26 +5167,13 @@ class SocialAuthAppFlowContractTest
         target, = decode_social_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
       end
 
-      case target.host
-      when visa_host
-        base_browser.host!(visa_host)
-        base_browser.https!
-        base_browser.get(target.request_uri, headers: social_navigation_headers(visa_host, site: "cross-site"))
-        current_browser = base_browser
-        current_host = visa_host
-      when auth_host
-        host!(auth_host)
-        https!
-        get(target.request_uri, headers: social_navigation_headers(auth_host, site: "cross-site"))
-        current_browser = self
-        current_host = auth_host
-      else
-        raise "unexpected social bootstrap host: #{target.host.inspect}"
-      end
+      current_browser, current_host = follow_social_authorization_target!(
+        target:, base_browser:, auth_host:, visa_host:, error_context: "social bootstrap",
+      )
     end
 
-    raise "social authorization bootstrap did not reach Auth" unless current_browser.equal?(self)
-    raise "social authorization bootstrap did not render Auth entry" unless response.successful?
+    raise RuntimeError, "social authorization bootstrap did not reach Auth" unless current_browser.equal?(self)
+    raise RuntimeError, "social authorization bootstrap did not render Auth entry" unless response.successful?
 
     initial_rt
   end
@@ -5179,7 +5190,7 @@ class SocialAuthAppFlowContractTest
         "X-CSRF-Token" => csrf,
       ),
     )
-    raise "Sign Up switch did not start" unless response.redirect?
+    raise RuntimeError, "Sign Up switch did not start" unless response.redirect?
 
     jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
     current_browser = self
@@ -5195,43 +5206,47 @@ class SocialAuthAppFlowContractTest
         target, = decode_social_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
       end
 
-      case target.host
-      when visa_host
-        base_browser.host!(visa_host)
-        base_browser.https!
-        base_browser.get(target.request_uri, headers: social_navigation_headers(visa_host, site: "cross-site"))
-        current_browser = base_browser
-        current_host = visa_host
-      when auth_host
-        host!(auth_host)
-        https!
-        get(target.request_uri, headers: social_navigation_headers(auth_host, site: "cross-site"))
-        current_browser = self
-        current_host = auth_host
-      else
-        raise "unexpected Sign Up switch host: #{target.host.inspect}"
-      end
-
-      next unless current_host == visa_host && current_browser.response.status == 200
-
-      continuation_form = Nokogiri::HTML(current_browser.response.body)
-        .at_css("form#visa-authorization-continuation-form")
-      next unless continuation_form
-
-      fields = continuation_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      current_browser.post(
-        continuation_form["action"], params: fields, headers: {
-          "Host" => visa_host,
-          "Origin" => "https://#{visa_host}",
-          "Sec-Fetch-Site" => "same-origin",
-          "Sec-Fetch-Mode" => "navigate",
-          "Sec-Fetch-Dest" => "document",
-        },
+      current_browser, current_host = follow_social_authorization_target!(
+        target:, base_browser:, auth_host:, visa_host:, error_context: "Sign Up switch",
       )
+      next unless post_social_visa_continuation_if_ready!(current_browser:, current_host:, visa_host:)
     end
 
     raise RuntimeError, "Sign Up switch did not settle on Auth" unless
       current_browser.equal?(self) && current_browser.response.successful?
+  end
+
+  def follow_social_authorization_target!(target:, base_browser:, auth_host:, visa_host:, error_context:)
+    case target.host
+    when visa_host
+      base_browser.host!(visa_host)
+      base_browser.https!
+      base_browser.get(target.request_uri, headers: social_navigation_headers(visa_host, site: "cross-site"))
+      [base_browser, visa_host]
+    when auth_host
+      host!(auth_host)
+      https!
+      get(target.request_uri, headers: social_navigation_headers(auth_host, site: "cross-site"))
+      [self, auth_host]
+    else
+      raise RuntimeError, "unexpected #{error_context} host: #{target.host.inspect}"
+    end
+  end
+
+  def post_social_visa_continuation_if_ready!(current_browser:, current_host:, visa_host:)
+    return false unless current_host == visa_host && current_browser.response.status == 200
+
+    continuation_form = Nokogiri::HTML(current_browser.response.body)
+      .at_css("form#visa-authorization-continuation-form")
+    return false unless continuation_form
+
+    fields = continuation_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    current_browser.post(
+      continuation_form["action"],
+      params: fields,
+      headers: social_visa_continuation_headers(visa_host),
+    )
+    true
   end
 
   def decode_social_jump_target!(uri, issuer_namespace:, issuer_host:)
@@ -5307,8 +5322,7 @@ class SocialAuthAppFlowContractTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

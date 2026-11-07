@@ -190,7 +190,8 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
       assert_equal 429, controller.response.status
       assert_equal WINDOW.to_i.to_s, controller.response.headers["Retry-After"]
       assert_equal "no-store", controller.response.headers["Cache-Control"]
-      assert_includes controller.response.body, "/sign"
+      assert_equal I18n.t("errors.messages.login_cooldown_retry"), controller.response.body
+      assert_not_includes controller.response.body, "http"
       assert_no_match(/\d+\s*(秒|seconds?)/, controller.response.body)
       assert_not_includes controller.response.body, "ログインが完了"
     end

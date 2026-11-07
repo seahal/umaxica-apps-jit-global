@@ -17,15 +17,15 @@ module RuntimeRole
   SHARED = "shared"
 
   # OP issuers: hold their realm's token signing key.
-  OP_ROLES = %w(op-base-app op-base-com op-base-org).freeze
+  OP_ROLES = %w(op-base-app op-base-org).freeze
   # Auth ceremony hosts: hold OmniAuth, OTP, HMAC and sending secrets; no OP signer.
-  AUTH_ROLES = %w(auth-app auth-com auth-org).freeze
-  # Twelve JP-development RP cells (one.md section 5.1): each requires only its own client assertion
+  AUTH_ROLES = %w(auth-app auth-org).freeze
+  # Nine JP-development RP cells: each requires only its own client assertion
   # private key and serves only its own local store.
   RP_ROLES = %w(
-    rp-base-app-ww rp-base-com-ww rp-base-org-ww rp-edit-org-ww rp-tech-org-ww
-    rp-core-app-jp rp-core-com-jp rp-core-org-jp
-    rp-warp-app-jp rp-warp-com-jp rp-warp-org-jp
+    rp-base-app-ww rp-base-org-ww rp-edit-org-ww rp-tech-org-ww
+    rp-core-app-jp rp-core-org-jp
+    rp-warp-app-jp rp-warp-org-jp
     rp-palm-app-jp
   ).freeze
   # Canonical domain authorities: their own stores and protocol secrets only.
@@ -88,8 +88,8 @@ module RuntimeRole
 
   class UnownedRoute < ArgumentError; end
 
-  # Any role may serve these: process health, revision, crawler files, CSP reports and the
-  # browser preference cookie, none of which reads a credential or an actor.
+  # Any role may serve these: process health, revision, crawler files, CSP reports, browser
+  # preferences and the retained anonymous com roots/content pages. They read no credential or actor.
   ANY_ROLE = "*"
 
   # Base keeps only the protocol exceptions that still execute with the authority base: its own
@@ -137,8 +137,20 @@ module RuntimeRole
   def route_owner(controller_path)
     family, realm, rest = controller_path.to_s.split("/", 3)
     case family
-    when "auth" then "auth-#{realm}"
-    when "core", "warp" then %w(dev net).include?(realm) ? ANY_ROLE : "rp-#{family}-#{realm}-jp"
+    when "auth"
+      return "auth-#{realm}" if %w(app org).include?(realm)
+
+      raise UnownedRoute, "no runtime role owns #{controller_path.inspect}"
+    when "core"
+      return ANY_ROLE if %w(dev net).include?(realm)
+      return "rp-core-#{realm}-jp" if %w(app org).include?(realm)
+
+      raise UnownedRoute, "no runtime role owns #{controller_path.inspect}"
+    when "warp"
+      return ANY_ROLE if %w(dev net com).include?(realm)
+      return "rp-warp-#{realm}-jp" if %w(app org).include?(realm)
+
+      raise UnownedRoute, "no runtime role owns #{controller_path.inspect}"
     when "palm" then "rp-palm-app-jp"
     when "edit", "tech" then "rp-#{family}-org-ww"
     when "base" then base_route_owner(realm, rest.to_s)
@@ -151,6 +163,7 @@ module RuntimeRole
 
   def base_route_owner(realm, rest)
     return ANY_ROLE if %w(dev net).include?(realm)
+    return ANY_ROLE if realm == "com" && rest == "roots"
 
     matches = ->(prefix) { rest == prefix || rest.start_with?("#{prefix}/") }
     BASE_DOMAIN_PREFIXES.each { |prefix, role| return role if matches.call(prefix) }
@@ -162,6 +175,8 @@ module RuntimeRole
   end
 
   def visa_route_owner(realm, rest)
+    raise UnownedRoute, "no runtime role owns visa/#{realm}/#{rest}" unless %w(app org).include?(realm)
+
     return ANY_ROLE if VISA_ANY_PREFIXES.any? { |prefix| rest == prefix || rest.start_with?("#{prefix}/") }
     return "op-base-#{realm}" if VISA_OP_PREFIXES.any? { |prefix| rest == prefix || rest.start_with?("#{prefix}/") }
 

@@ -8,12 +8,10 @@ module IdentifierBlindIndex
 
   EMAIL_KEYS = {
     "app" => :APP_EMAIL_ADDRESS_HMAC_KEY,
-    "com" => :COM_EMAIL_ADDRESS_HMAC_KEY,
     "org" => :ORG_EMAIL_ADDRESS_HMAC_KEY,
   }.freeze
   TELEPHONE_KEYS = {
     "app" => :APP_TELEPHONE_NUMBER_HMAC_KEY,
-    "com" => :COM_TELEPHONE_NUMBER_HMAC_KEY,
     "org" => :ORG_TELEPHONE_NUMBER_HMAC_KEY,
   }.freeze
 

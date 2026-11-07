@@ -13,6 +13,7 @@ module Auth
 
               AUTHENTICATION_MODE = :guest
               sign_entry_classification! :sign_up
+              around_action :with_otp_verification_response_timing, only: :update
 
               def show
                 return unless load_gate_context!(gate_for_show)
@@ -25,30 +26,37 @@ module Auth
 
               def create
                 return unless load_gate_context!(gate_for_create)
+                return if reject_invalid_otp_resend_state?
 
                 @user_telephone = current_registration_telephone
                 return redirect_telephone_session_expired unless @user_telephone
-                return render_otp_resend_too_soon if otp_resend_rate_limited?
+                return render_otp_resend_too_soon if otp_resend_json_request? && otp_resend_rate_limited?
 
                 begin
                   result = issue_otp_ceremony!
                 rescue ActiveJob::EnqueueError, TelephoneSignUpOtpDeliveryIssuer::DeliveryUnavailable
+                  return render_otp_resend_failure if otp_resend_json_request?
+
                   return render_signup_telephone_delivery_unavailable
                 end
                 if result.status == :registered_destination
+                  return render_otp_resend_registered_destination if otp_resend_json_request?
+
                   return redirect_to(
                     auth_app_sign_up_check_telephone_otp_path(
                       **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
                     ),
                   )
                 end
-                return render_otp_ceremony_result(result) unless result.success?
+                return render_otp_issue_failure(result) unless result.success?
 
                 registration = (session[:user_telephone_registration] || {}).dup
                 registration["public_id"] ||= @user_telephone.public_id
                 registration["expires_at"] = result.transaction.otp_expires_at.to_i
                 session[:user_telephone_registration] = registration
                 session[:user_telephone_otp_last_sent_at] = Time.current.to_i
+                return render_otp_resend_success if otp_resend_json_request?
+
                 redirect_to(
                   auth_app_sign_up_check_telephone_otp_path(
                     **sign_up_flow_binding_params, ri: params[:ri],
@@ -114,6 +122,13 @@ module Auth
                   flow: @sign_up_ticket, telephone: @user_telephone,
                   session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
+              end
+
+              def otp_resend_cooldown_remaining_for_json = telephone_otp_resend_cooldown_remaining
+
+              def render_otp_resend_registered_destination
+                session[:user_telephone_otp_last_sent_at] = Time.current.to_i
+                render_otp_resend_success
               end
 
               def verify_otp_ceremony!(submitted_code)

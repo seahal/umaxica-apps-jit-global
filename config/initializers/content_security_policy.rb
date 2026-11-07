@@ -22,13 +22,11 @@ Rails.application.configure do
     visa_form_hosts =
       [
         boot_config.fetch(:hosts).visa_service.to_s,
-        boot_config.fetch(:hosts).visa_corporate.to_s,
         boot_config.fetch(:hosts).visa_staff.to_s,
       ]
     sign_form_hosts =
       [
         boot_config.fetch(:hosts).sign_service.to_s,
-        boot_config.fetch(:hosts).sign_corporate.to_s,
         boot_config.fetch(:hosts).sign_staff.to_s,
       ].uniq
     # The jump gateway is the first-party redirect broker that validates signed `rt`

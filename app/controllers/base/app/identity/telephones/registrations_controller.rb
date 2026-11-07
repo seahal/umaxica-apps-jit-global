@@ -21,6 +21,7 @@ module Base
 
           before_action :authorize_telephone_registration!, only: %i(new create edit update)
           around_action :with_otp_issue_response_timing, only: :create
+          around_action :with_otp_verification_response_timing, only: :update
 
           def new
             @user_telephone = ClientTelephone.new
@@ -102,6 +103,9 @@ module Base
                 )
               rescue TelephoneCredentialRegistrationOtpFinalizer::DependencyFailure
                 return head :service_unavailable
+              rescue AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
+                @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
+                return render_registration_edit(status: :unprocessable_content)
               end
               reset_registration_session!
               redirect_to(
@@ -133,6 +137,19 @@ module Base
                    status: status
           end
 
+          def telephone_registration_error_messages
+            return [] unless @user_telephone
+
+            invalid_code_message = t("sign.app.registration.telephone.update.invalid_code")
+            @user_telephone.errors.map do |error|
+              if error.attribute == :pass_code && error.message == invalid_code_message
+                error.message
+              else
+                error.full_message
+              end
+            end
+          end
+
           def registration_new_props
             {
               title: t("sign.app.settings.telephone.new.title"),
@@ -161,7 +178,7 @@ module Base
                 submit_label: "Verify",
               },
               cancel_link: { label: "Cancel", href: base_app_identity_telephones_path(ri: params[:ri]) },
-              errors: Array(@user_telephone&.errors&.full_messages),
+              errors: telephone_registration_error_messages,
             }
           end
 

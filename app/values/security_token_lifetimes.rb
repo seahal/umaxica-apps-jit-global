@@ -26,7 +26,6 @@ module SecurityTokenLifetimes
   # absolute token lifetimes above are unchanged.
   CLIENT_IDLE_TTL = 8.hours
   OPERATOR_IDLE_TTL = 30.minutes
-  VISITOR_IDLE_TTL = 8.hours
 
   # How long after a root login the session may bootstrap its first authenticator. The anchor is
   # the token's root_login_established_at, which refresh, ceremony continuation and ordinary access
@@ -36,7 +35,6 @@ module SecurityTokenLifetimes
 
   CLIENT_REFRESH_TOKEN_TTL = 30.days
   OPERATOR_REFRESH_TOKEN_TTL = 8.hours
-  VISITOR_REFRESH_TOKEN_TTL = 30.days
 
   # Minimum gap between per-request last_used_at writes. Activity tracking is
   # throttled so an authenticated request does not write to the session row on
@@ -49,13 +47,12 @@ module SecurityTokenLifetimes
     ttl + JWKS_ROTATION_LEEWAY + CDN_STALE_LEEWAY
   end
 
-  # Idle timeout window for the given surface ("operator", "visitor", or the
-  # client default). Unknown surfaces fall back to the client window.
+  # Idle timeout window for the given authenticated resource type.
   def idle_ttl_for(resource_type)
     case resource_type.to_s
     when "operator" then OPERATOR_IDLE_TTL
-    when "visitor" then VISITOR_IDLE_TTL
-    else CLIENT_IDLE_TTL
+    when "client" then CLIENT_IDLE_TTL
+    else raise ArgumentError, "unsupported authentication resource type: #{resource_type.inspect}"
     end
   end
 end

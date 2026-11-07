@@ -135,20 +135,7 @@ module SignUpSequenceControllerSupport
       return
     end
 
-    # D-178: the date is decided on the validated, unsaved value, so an ineligible birthdate is
-    # never written. The only ineligible birthdate left by
-    # ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions` is one of today or
-    # later, which `HasBirthdate#birthdate_not_future` already refuses.
-    actor.birthdate = sign_up_birthdate_param
-    unless actor.valid? && SignUpEligibilityPolicy.eligible?(
-      actor.birthdate,
-      surface: sign_up_surface,
-      today: Time.zone.today,
-    )
-      actor.restore_attributes([:birthdate])
-      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
-      return
-    end
+    return unless valid_sign_up_birthdate?(actor)
 
     source_finalization_result = :not_attempted
     preauthorized_finalization_context = nil
@@ -182,22 +169,50 @@ module SignUpSequenceControllerSupport
         end
       end
 
-    contact =
-      if @sign_up_ticket.is_a?(ClientSignUpFlow) && @sign_up_ticket.principal_id == actor.id
-        case @sign_up_ticket.pending_contact_type
-        when "email" then ClientEmail.find_by(id: @sign_up_ticket.pending_contact_id)
-        when "telephone" then ClientTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
-        end
-      end
-    if contact && contact.user_id == actor.id
-      AppRegisteredContactDestinationGuard.with_available_destination(contact: contact, owner: actor, &complete)
-    else
-      complete.call
-    end
+    contact = sign_up_contact_for_birthdate_completion(actor)
+    run_birthdate_completion_with_available_destination(contact:, actor:, &complete)
     return unless finalize_after_guard
 
     finalize_sign_up_from_checkpoint!(
       source_finalization_result:, preauthorized_context: preauthorized_finalization_context,
+    )
+  end
+
+  def valid_sign_up_birthdate?(actor)
+    # D-178: the date is decided on the validated, unsaved value, so an ineligible birthdate is
+    # never written. The only ineligible birthdate left by
+    # ADR `sign-up-one-day-minimum-age-and-feature-level-age-restrictions` is one of today or
+    # later, which `HasBirthdate#birthdate_not_future` already refuses.
+    actor.birthdate = sign_up_birthdate_param
+    return true if actor.valid? && SignUpEligibilityPolicy.eligible?(
+      actor.birthdate,
+      surface: sign_up_surface,
+      today: Time.zone.today,
+    )
+
+    actor.restore_attributes([:birthdate])
+    render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
+    false
+  end
+
+  def sign_up_contact_for_birthdate_completion(actor)
+    return unless @sign_up_ticket.is_a?(ClientSignUpFlow) && @sign_up_ticket.principal_id == actor.id
+
+    case @sign_up_ticket.pending_contact_type
+    when "email" then ClientEmail.find_by(id: @sign_up_ticket.pending_contact_id)
+    when "telephone" then ClientTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
+    end
+  end
+
+  def run_birthdate_completion_with_available_destination(contact:, actor:)
+    if contact && contact.user_id == actor.id
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: contact, owner: actor) { yield }
+    else
+      yield
+    end
+  rescue AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
+    render_sign_up_result(
+      SignUpResult.build(status: :failed, ticket: @sign_up_ticket, errors: ["registration refused"]),
     )
   end
 
@@ -500,7 +515,8 @@ module SignUpSequenceControllerSupport
     :accepted
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved,
          SignAppUpTelephoneRegistrationFinalizer::PasskeyMissingError,
-         SocialAuth::ProviderError, IdentitySocialCeremonyContract::Error
+         SocialAuth::ProviderError, IdentitySocialCeremonyContract::Error,
+         AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
     :failed
   end
 

@@ -79,6 +79,11 @@ class Base::App::RpSelectorFlowTest < ActionDispatch::IntegrationTest
       assert_equal "Selected persona", identity.fetch("display_name")
       assert_equal base_app_dashboard_avatar_image_path(ri: "jp", v: "test-image"),
                    identity.dig("avatar_image", "src")
+      # Base shows the signed-in state without a link back to itself.
+      assert_equal(
+        [[I18n.t("layouts.shared.account_navigation.sign_out"), new_base_app_sign_out_path(ri: "jp")]],
+        inertia_props.dig("chrome", "account_navigation", "links").map { |link| link.values_at("label", "href") },
+      )
       assert_mock avatar_owner
       assert_not ClientToken.exists?(user: @actor)
       assert_not OpAppGrant.joins(:client_token).exists?(client_tokens: { user_id: @actor.id })

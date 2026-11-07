@@ -5,7 +5,7 @@ module Webauthn
   # Resolves the RelyingPartyConfig for a surface.
   #
   # production: values MUST be injected per surface by the deployment
-  # environment (WEBAUTHN_<APP|COM|ORG>_RP_ID / _ORIGIN). One-argument
+  # environment (WEBAUTHN_<APP|ORG>_RP_ID / _ORIGIN). One-argument
   # ENV.fetch makes a missing value a boot/request failure -- there is no
   # request-derived, shared-key, or credentials fallback in production.
   #

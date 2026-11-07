@@ -322,8 +322,7 @@ class Base::Org::Support::StandbyEnforcementCasesControllerTest < ActionDispatch
     [OperatorCapabilityGrant::IAM_CAPABILITY_READ,
      OperatorCapabilityGrant::IAM_CAPABILITY_GRANT,
      OperatorCapabilityGrant::IAM_CAPABILITY_REVOKE,
-     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
-     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM,].each do |capability|
+     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
         origin: "bootstrap",
@@ -342,7 +341,7 @@ class Base::Org::Support::StandbyEnforcementCasesControllerTest < ActionDispatch
       operator: grantee,
       granted_by_operator: @approver,
       origin: "grant",
-      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM,
+      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
       reason_code: "duty_assignment",
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,

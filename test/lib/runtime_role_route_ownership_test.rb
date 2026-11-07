@@ -44,7 +44,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
   test "Base identity and credential pages belong to the realm RP" do
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/identity/birthdates")
-    assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/roots")
+    assert_equal RuntimeRole::ANY_ROLE, RuntimeRole.route_owner("base/com/roots")
     assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/identity/secret_credentials")
     assert_equal "op-base-app", RuntimeRole.route_owner("base/app/ceremony_binding_confirmations")
     assert_equal "op-base-org", RuntimeRole.route_owner("visa/org/oauth/tokens")
@@ -95,6 +95,10 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
     assert_equal "rp-edit-org-ww", RuntimeRole.route_owner("edit/org/roots")
     assert_equal "rp-tech-org-ww", RuntimeRole.route_owner("tech/org/roots")
     assert_equal "auth-org", RuntimeRole.route_owner("auth/org/sign/in/emails")
+    assert_equal RuntimeRole::ANY_ROLE, RuntimeRole.route_owner("warp/com/roots")
+    assert_raises(RuntimeRole::UnownedRoute) { RuntimeRole.route_owner("auth/com/sign/in/emails") }
+    assert_raises(RuntimeRole::UnownedRoute) { RuntimeRole.route_owner("visa/com/oauth/authorize") }
+    assert_raises(RuntimeRole::UnownedRoute) { RuntimeRole.route_owner("core/com/roots") }
   end
 
   test "a prefix matches whole path segments only" do

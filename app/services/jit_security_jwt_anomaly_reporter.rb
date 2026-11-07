@@ -51,7 +51,6 @@ module JitSecurityJwtAnomalyReporter
     case resource_type.to_s
     when "client" then "AUTH_CLIENT"
     when "operator", "staff" then "AUTH_OPERATOR"
-    when "visitor", "customer" then "AUTH_VISITOR"
     end
   end
 

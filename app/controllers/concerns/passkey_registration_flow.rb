@@ -283,8 +283,8 @@ module PasskeyRegistrationFlow
 
   def recovery_passcode_reveal_purpose
     case webauthn_surface.key
-    when :com
-      "visitor.recovery_secret_credential"
+    when :app
+      "client.recovery_secret_credential"
     when :org
       "org.recovery_passcodes"
     else

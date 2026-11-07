@@ -118,12 +118,12 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     private
 
     def jump_rt_issuer_namespace
-      "BASE_COM"
+      "BASE_APP"
     end
   end
 
   setup do
-    host! "id.com.localhost"
+    host! "id.app.localhost"
     Rails.application.routes.draw do
       post "test_auth_login" => "auth_booster_test/dummy_auth#login_action"
       post "test_auth_logout" => "auth_booster_test/dummy_auth#logout_action"

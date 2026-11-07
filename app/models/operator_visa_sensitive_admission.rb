@@ -7,6 +7,8 @@ class OperatorVisaSensitiveAdmission < OpBaseOrgRecord
 
   def self.connection_owner = OpBaseOrgRecord
 
+  public_class_method :connection_owner
+
   belongs_to :oidc_authorization_transaction, class_name: "OperatorOidcAuthorizationTransaction"
   belongs_to :step_up_ceremony_transaction, class_name: "OperatorStepUpCeremonyTransaction"
   belongs_to :auth_admission_binding, class_name: "OperatorAuthAdmissionBinding"

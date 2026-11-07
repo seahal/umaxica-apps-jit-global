@@ -54,7 +54,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
       token: "token",
       client_id: "client-1",
       client_secret: "secret",
-      expected_resource_type: "visitor",
+      expected_resource_type: "operator",
       host: "com.example.test",
     )
     client = Struct.new(:resource_type).new("client")

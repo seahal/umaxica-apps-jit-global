@@ -8,7 +8,7 @@
 > refresh, preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
 Fresh Umaxica step-up, achieved AAL, phishing resistance, allowed methods, and freshness are
-independent conditions. Email OTP may complete APP/COM normal step-up but has no achieved NIST AAL;
+independent conditions. Email OTP may complete APP normal step-up but has no achieved NIST AAL;
 TOTP alone and current UV passkey ceremonies record AAL1, while passkey is phishing-resistant.
 
 ## Surface policy
@@ -16,10 +16,9 @@ TOTP alone and current UV passkey ceremonies record AAL1, while passkey is phish
 | surface | sign-up / sign-in                                                | normal step-up                                         | passkey UV                                             |
 | ------- | ---------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
 | APP     | Email OTP and passkey (plus existing documented primary methods) | Passkey preferred; TOTP and Email OTP are alternatives | required for registration and sign-in                  |
-| COM     | Email OTP and passkey (plus existing documented primary methods) | Passkey and Email OTP                                  | required for registration and sign-in                  |
 | ORG     | Passkey, Secret Credential, and Microsoft Entra ID               | Passkey only                                           | required for registration where applicable and sign-in |
 
-Email OTP on APP and COM is an explicit Umaxica product exception. It completes normal step-up
+Email OTP on APP is an explicit Umaxica product exception. It completes normal step-up
 freshness, but neither Email OTP nor TOTP alone satisfies NIST AAL2. ORG does not use Email OTP for
 sign-up, sign-in, or step-up. A future operation may independently require an AAL, phishing
 resistance, a restricted method set, and a freshness window.
@@ -54,7 +53,7 @@ Current AAL1 sign-in methods are surface-aware:
 `passcode` means the current sign-in code path implemented by the existing secret-backed models and
 routes.
 
-Email address is not an authenticator. Successful Email OTP may establish APP/COM authentication or
+Email address is not an authenticator. Successful Email OTP may establish APP authentication or
 normal step-up, but it does not achieve NIST AAL2.
 
 Telephone is not an AAL method in this product. A telephone number may be used as a personal
@@ -127,11 +126,11 @@ The current ceremony evidence is recorded as follows:
 
 | method    | completes normal step-up | achieved AAL | phishing-resistant |
 | --------- | ------------------------ | ------------ | ------------------ |
-| Email OTP | APP and COM              | `none`       | no                 |
+| Email OTP | APP                      | `none`       | no                 |
 | TOTP      | APP                      | `aal1`       | no                 |
-| Passkey   | APP, COM, and ORG        | `aal1`       | yes                |
+| Passkey   | APP and ORG              | `aal1`       | yes                |
 
-Email OTP is an explicit Umaxica exception. It can establish APP/COM authentication and complete
+Email OTP is an explicit Umaxica exception. It can establish APP authentication and complete
 normal step-up, but it is never silently promoted to NIST AAL2. TOTP alone also does not achieve
 AAL2. Passkey assurance is derived from the verified WebAuthn ceremony; the current UV-required
 ceremony records AAL1 and phishing resistance rather than assuming AAL2.
@@ -159,7 +158,7 @@ Current personal identifiers:
 
 | credential       | personal identifier | contact identifier | AAL relationship                                                                                                  |
 | ---------------- | ------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| email address    | yes                 | yes                | Not AAL by itself. Email OTP may authenticate or complete APP/COM normal step-up, but does not achieve NIST AAL2. |
+| email address    | yes                 | yes                | Not AAL by itself. Email OTP may authenticate or complete APP normal step-up, but does not achieve NIST AAL2. |
 | telephone number | yes                 | yes                | Not AAL1, AAL2, or AAL3. It is an entry point, contact point, or recovery input only.                             |
 | Google identity  | yes                 | no                 | Google provider authentication may satisfy AAL1 on supported surfaces.                                            |
 | Apple identity   | yes                 | no                 | Apple provider authentication may satisfy AAL1 on app.                                                            |
@@ -168,7 +167,7 @@ Current contact identifiers:
 
 | credential       | contact identifier | AAL relationship                                                                                                  |
 | ---------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| email address    | yes                | Not AAL by itself. Email OTP may authenticate or complete APP/COM normal step-up, but does not achieve NIST AAL2. |
+| email address    | yes                | Not AAL by itself. Email OTP may authenticate or complete APP normal step-up, but does not achieve NIST AAL2. |
 | telephone number | yes                | Not AAL1, AAL2, or AAL3. It is an entry point, contact point, or recovery input only.                             |
 
 Ordinary credential-management flows must preserve at least one usable contact identifier after a
@@ -192,11 +191,10 @@ state, and they should not be read from `Actor.authn`.
 | surface | sign-up / sign-in                                                                                              | normal step-up                              |
 | ------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | APP     | Email OTP and passkey are allowed; existing social and other primary flows remain governed by their own policy | Passkey, TOTP, Email OTP; passkey preferred |
-| COM     | Email OTP and passkey are allowed                                                                              | Passkey, Email OTP                          |
 | ORG     | Passkey, Secret Credential, Microsoft Entra ID                                                                 | Passkey only                                |
 
-ORG Email OTP is not an authentication or step-up method. COM does not gain a Visitor TOTP lifecycle
-in this change. Surface policy and the signed transaction method set are intersected server-side, so
+ORG Email OTP is not an authentication or step-up method. The public COM surface has no
+authentication or step-up methods. Surface policy and the signed transaction method set are intersected server-side, so
 a direct request cannot expand the permitted methods.
 
 ## AAL3
@@ -208,7 +206,7 @@ shut down or materially disable the system. AAL3 should be treated as strong aut
 strong approval workflow, not simply as another MFA prompt.
 
 The expected surface for AAL3 is `org`, because the likely use cases are operator-only operational
-controls. No app/com AAL3 behavior is planned.
+controls. No APP AAL3 behavior is planned.
 
 Future AAL3 design should include separate request, approval, and execution steps; non-self
 approval; audit logs; notification; and, where appropriate, quorum, cooldown, abort, or rollback
@@ -235,7 +233,7 @@ strings. Server-side enforcement (`verify(..., user_verification: true)` plus ex
 | Purpose             | Flow                                          | Policy   |
 | ------------------- | --------------------------------------------- | -------- |
 | `registration`      | sign-up and settings passkey registration     | required |
-| `direct_sign_in`    | discoverable app/com sign-in; actor-known org sign-in | required |
+| `direct_sign_in`    | discoverable app sign-in; actor-known org sign-in | required |
 | `mfa_challenge`     | passkey as second factor after another factor | required |
 | `ordinary_step_up`  | step-up verification for sensitive settings   | required |
 | `high_risk_step_up` | reserved for future high-risk operations      | required |

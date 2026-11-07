@@ -3,6 +3,14 @@
 Inspected commit: `48ff7040de2b50a8a08ed660fa71878a029ba577`.
 The inspected implementation declares 108 encrypted attributes across 51 concrete models.
 
+## Current implementation status (2026-11-07)
+
+The inventory above is a historical snapshot of the inspected commit. Current identifier
+blind-index and encryption providers support the `app` and `org` authentication realms only; the
+COM authentication key branches were removed. No encrypted data, schema, or database was deleted
+as part of that code change. Existing COM records and keys require a separately approved data and
+key-retirement plan before any destructive cleanup.
+
 ## Identifier keyrings in this change
 
 ClientEmail and ClientTelephone use APP; VisitorEmail and VisitorTelephone use COM;

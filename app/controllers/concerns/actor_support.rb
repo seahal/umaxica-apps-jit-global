@@ -117,13 +117,10 @@ module ActorSupport
     return actor_type if actor_type.present? && actor_type != :unauthenticated
     return :unauthenticated if resource.blank?
 
-    if resource.respond_to?(:operator?) && resource.operator?
-      :operator
-    elsif resource.respond_to?(:visitor?) && resource.visitor?
-      :visitor
-    else
-      :client
-    end
+    return :operator if resource.respond_to?(:operator?) && resource.operator?
+    return :client if resource.is_a?(Client)
+
+    raise ArgumentError, "unsupported actor resource: #{resource.class.name}"
   end
 
   def resolved_current_session

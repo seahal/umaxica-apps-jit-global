@@ -62,7 +62,7 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     rejected = @store.consume!(
       purpose: :authentication_result,
       raw_code: raw,
-      expected: { actor_type: "visitor", surface: "com", subject_ref: "transaction-1" },
+      expected: { actor_type: "operator", surface: "org", subject_ref: "transaction-1" },
     )
 
     assert_predicate rejected, :binding_mismatch?
@@ -147,7 +147,7 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
 
     rejected = @store.consume_reference!(
       reference: "entry-1",
-      expected: { actor_type: "visitor", surface: "com" },
+      expected: { actor_type: "operator", surface: "org" },
       purposes: ["authentication_handoff"],
     )
 
@@ -160,6 +160,19 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     )
 
     assert_predicate accepted, :success?
+  end
+
+  test "issue rejects retired visitor and mismatched actor surface values" do
+    [
+      { actor_type: "visitor", surface: "com" },
+      { actor_type: "client", surface: "com" },
+      { actor_type: "client", surface: "org" },
+      { actor_type: "unknown", surface: "app" },
+    ].each do |binding|
+      assert_raises(ArgumentError) do
+        @store.issue!(purpose: :authentication_handoff, **binding)
+      end
+    end
   end
 
   test "every operation reports Valkey unavailability as Unavailable" do

@@ -18,7 +18,12 @@ module RpBackchannelLogoutEndpoint
     registered_host = URI.parse(OidcClientStoresStaticClientStore.backchannel_logout_uri(cell.client_id)).host
     return head(:not_found) unless request.host == registered_host
 
-    resource_type = { "app" => "client", "com" => "visitor", "org" => "operator" }.fetch(cell.realm)
+    resource_type =
+      case cell.realm
+      when "app" then "client"
+      when "org" then "operator"
+      else raise ArgumentError, "unsupported RP cell realm: #{cell.realm.inspect}"
+      end
     issuer = OidcIssuer.for_resource_type(resource_type)
     verification = OidcOpLogoutTokenVerifier.new(
       logout_token: params[:logout_token].to_s, client_id: cell.client_id, issuer:,

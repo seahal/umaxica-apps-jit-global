@@ -988,21 +988,17 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_not_nil delivery_job
     delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params)
-    context = ceremony.email_otp_context
     pass_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
-    correct_parent = context.fetch("parent_ref") == @transaction.transaction_id
-    correct_contact = context.fetch("contact_ref") == @email_record.public_id
-    correct_owner = context.fetch("owner_ref") == @user.public_id
-    correct_generation = context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
     plaintext_queued = delivery_job.fetch(:args).to_s.include?(pass_code)
 
-    assert correct_parent, "Delivery must bind the original OIDC Parent"
-    assert correct_contact, "Delivery must bind the actual Contact"
-    assert correct_owner, "Delivery must bind the actual owner"
-    assert correct_generation, "Delivery must bind the current ceremony generation"
+    assert_equal [@transaction.transaction_id, @email_record.public_id, @user.public_id,
+                  delivery.fetch(:auth_email_otp_generation), "oidc",],
+                 [ceremony.email_otp_context.fetch("parent_ref"),
+                  ceremony.email_otp_context.fetch("contact_ref"), ceremony.email_otp_context.fetch("owner_ref"),
+                  ceremony.email_otp_context.fetch("generation"), ceremony.email_otp_context.fetch("parent_kind"),],
+                 "Delivery must bind the original Parent, Contact, owner, and generation"
     assert_not plaintext_queued, "Delivery must not queue plaintext code"
     assert_equal "sign_in", delivery.fetch(:purpose)
-    assert_equal "oidc", context.fetch("parent_kind")
 
     patch(
       auth_app_sign_in_email_url(ri: "jp"),

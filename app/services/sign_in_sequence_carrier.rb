@@ -5,7 +5,6 @@ class SignInSequenceCarrier
   KEY = :sign_in_sequence
   SURFACE_KEYS = {
     app: :app_sign_in_sequence,
-    com: :com_sign_in_sequence,
     org: :org_sign_in_sequence,
   }.freeze
   TTL = 15.minutes

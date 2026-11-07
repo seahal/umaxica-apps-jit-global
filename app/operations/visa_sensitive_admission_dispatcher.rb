@@ -18,6 +18,8 @@ class VisaSensitiveAdmissionDispatcher
   }.freeze
 
   class << self
+    public
+
     def call!(surface:, params:, validated_request:)
       new(surface:, params:, validated_request:).call
     end
@@ -28,6 +30,8 @@ class VisaSensitiveAdmissionDispatcher
     @params = params.to_h.symbolize_keys
     @validated_request = validated_request
   end
+
+  public
 
   def call
     candidates = CONFIG.fetch(surface)
@@ -68,7 +72,15 @@ class VisaSensitiveAdmissionDispatcher
   def validate_match!(admission, authorization, purpose:, provider:, binding_class:)
     now = admission.class.connection_owner.database_now
     binding = binding_class.find(admission.auth_admission_binding_id)
-    request_matches = authorization.surface == surface && authorization.intent == "step_up" &&
+    request_matches = request_matches?(authorization)
+    admission_matches = admission_matches?(
+      admission, authorization, purpose:, provider:, binding:, now:,
+    )
+    raise InvalidRequest unless request_matches && admission_matches
+  end
+
+  def request_matches?(authorization)
+    authorization.surface == surface && authorization.intent == "step_up" &&
       authorization.client_id == validated_request.client.client_id &&
       authorization.redirect_uri == params.fetch(:redirect_uri).to_s &&
       authorization.response_type == params.fetch(:response_type).to_s &&
@@ -76,16 +88,19 @@ class VisaSensitiveAdmissionDispatcher
       authorization.nonce == params.fetch(:nonce).to_s &&
       authorization.code_challenge == params.fetch(:code_challenge).to_s &&
       authorization.code_challenge_method == params.fetch(:code_challenge_method).to_s &&
-      authorization.oidc_prompt == validated_request.prompt && authorization.oidc_max_age == validated_request.max_age &&
+      authorization.oidc_prompt == validated_request.prompt &&
+      authorization.oidc_max_age == validated_request.max_age &&
       validated_request.step_up_requested
+  end
+
+  def admission_matches?(admission, authorization, purpose:, provider:, binding:, now:)
     provider_matches = provider ? admission.provider == provider : admission.provider.in?(%w(google apple))
-    admission_matches = admission.realm == surface && admission.client_id == validated_request.client.client_id &&
+    admission.realm == surface && admission.client_id == validated_request.client.client_id &&
       admission.purpose == purpose && provider_matches &&
       admission.status.in?(%w(issued browser_confirmed)) && admission.expires_at > now &&
       admission.rp_session_expires_at > now && !authorization.expired?(now:) &&
       !authorization.login_challenge_expired?(now:) && authorization.pending? &&
       binding.purpose == "credential_registration_handoff" && binding.live?(now:) &&
       binding.step_up_ceremony_transaction_id == admission.step_up_ceremony_transaction_id
-    raise InvalidRequest unless request_matches && admission_matches
   end
 end

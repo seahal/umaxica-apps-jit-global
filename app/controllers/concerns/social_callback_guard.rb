@@ -119,9 +119,6 @@ module SocialCallbackGuard
             PUBLIC_AUTH_SERVICE_URL
             AUTH_SERVICE_URL
             PRIVATE_AUTH_SERVICE_URL
-            PUBLIC_AUTH_CORPORATE_URL
-            AUTH_CORPORATE_URL
-            PRIVATE_AUTH_CORPORATE_URL
             PUBLIC_AUTH_STAFF_URL
             AUTH_STAFF_URL
             PRIVATE_AUTH_STAFF_URL
@@ -130,7 +127,7 @@ module SocialCallbackGuard
         if Rails.configuration.x.respond_to?(:boot_config)
           boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
           hosts.concat(
-            %i(sign_service sign_corporate sign_staff).filter_map do |host_name|
+            %i(sign_service sign_staff).filter_map do |host_name|
               normalize_host_port(boot_hosts.public_send(host_name).to_s)
             end,
           )
@@ -138,10 +135,8 @@ module SocialCallbackGuard
 
         if Rails.env.local?
           hosts << "auth.app.localhost"
-          hosts << "auth.com.localhost"
           hosts << "auth.org.localhost"
           hosts << "sign.app.localhost"
-          hosts << "sign.com.localhost"
           hosts << "sign.org.localhost"
         end
 

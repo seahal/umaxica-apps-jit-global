@@ -32,6 +32,7 @@ const THEME_CHROME: SurfaceChrome = {
     description: "表示テーマを選びます。",
     options: { system: "システム", light: "ライト", dark: "ダーク" },
   },
+  account_navigation: null,
   copyright: "(c) Umaxica",
 };
 const pageProps: {
@@ -262,6 +263,7 @@ describe("PreferenceSelect interaction", () => {
             footer_navigation: null,
             cookie_controls: null,
             theme_controls: null,
+            account_navigation: null,
             copyright: "",
           },
         },
@@ -339,6 +341,7 @@ describe("PreferenceSelect interaction", () => {
             footer_navigation: null,
             cookie_controls: null,
             theme_controls: null,
+            account_navigation: null,
             copyright: "",
           },
         },
@@ -402,6 +405,7 @@ describe("PreferenceSelect interaction", () => {
             footer_navigation: null,
             cookie_controls: null,
             theme_controls: null,
+            account_navigation: null,
             copyright: "",
           },
         },

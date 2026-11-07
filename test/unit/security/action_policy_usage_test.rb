@@ -46,7 +46,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/base/org/support/enforcement_cases/approvals_controller.rb#create",
     "app/controllers/base/org/support/enforcement_cases/releases_controller.rb#create",
     "app/controllers/base/org/support/enforcement_cases_controller.rb#create",
-    "app/controllers/base/org/support/visitors/revocations_controller.rb#create",
     # Sign/settings ceremony endpoints are protected by ceremony state, provider ownership,
     # WebAuthn/passkey challenge state, or recovery/removal sequence gates rather than a durable
     # domain record policy at the controller action boundary.
@@ -94,7 +93,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/base/org/identity/revocations/others_controller.rb#create",
     "app/controllers/base/org/identity/revocations_controller.rb#create",
     "app/controllers/base/org/identity/sessions_controller.rb#destroy",
-    "app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb#destroy",
 
     # Selector/switcher updates validate the requested account/organization/avatar combination
     # through AcmeSelectableContext and persist only an already-authorized context selection.

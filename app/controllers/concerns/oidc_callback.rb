@@ -4,6 +4,10 @@
 module OidcCallback
   extend ActiveSupport::Concern
 
+  # Every including RP callback controller must define the private
+  # `oidc_rp_default_landing_path` method. A verified target_link_uri wins; otherwise the callback
+  # uses that controller's explicit landing path.
+
   include RpCellLocalSession
 
   InvalidCallbackState =
@@ -117,7 +121,7 @@ module OidcCallback
     uri = URI.parse(token_url)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     allowed_hosts =
-      [hosts.visa_service.host, hosts.visa_corporate.host, hosts.visa_staff.host]
+      [hosts.visa_service.host, hosts.visa_staff.host]
         .map { |host| host.to_s.downcase }
     local_port_value = ENV["PORT"]
     return true if local_port_value.nil?
@@ -211,9 +215,10 @@ module OidcCallback
     nil
   end
 
-  # The target restored once after a successful callback (D-151); otherwise the RP default page.
+  # The target restored once after a successful callback (D-151); otherwise this RP's explicit
+  # landing path. A missing controller declaration is an error, not a shared fallback.
   def consume_oidc_pt
-    @current_oidc_target_link_uri || "/"
+    @current_oidc_target_link_uri || oidc_rp_default_landing_path
   end
 
   def session_limit_gate_pt

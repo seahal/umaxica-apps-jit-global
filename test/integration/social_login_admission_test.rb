@@ -1145,11 +1145,22 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       outcome = social_intent_crossing!(provider: "apple", registered:, sign_up:)
       status, location, body = outcome.fetch(:response)
       page = Nokogiri::HTML(body)
+      guidance_translation_keys =
+        case guidance_kind
+        when "registered"
+          { title: "sign.app.social.verified_subject_guidance.registered.title",
+            body: "sign.app.social.verified_subject_guidance.registered.body", }
+        when "unregistered"
+          { title: "sign.app.social.verified_subject_guidance.unregistered.title",
+            body: "sign.app.social.verified_subject_guidance.unregistered.body", }
+        else
+          raise ArgumentError, "unsupported verified subject guidance kind: #{guidance_kind.inspect}"
+        end
 
       assert_equal [400, nil], [status, location]
       assert_equal [0, 0, 0, 0], outcome.fetch(:created)
-      assert_equal I18n.t("sign.app.social.verified_subject_guidance.#{guidance_kind}.title"), page.at_css("h1").text
-      assert_includes page.text, I18n.t("sign.app.social.verified_subject_guidance.#{guidance_kind}.body")
+      assert_equal I18n.t(guidance_translation_keys.fetch(:title)), page.at_css("h1").text
+      assert_includes page.text, I18n.t(guidance_translation_keys.fetch(:body))
       target = URI.parse(page.at_css("a")["href"])
 
       assert_equal [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), "/sign", { "ri" => "jp" }],
@@ -1287,21 +1298,10 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal 307, auth.response.status
     state = auth.session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
     nonce = (provider == "apple") ? auth.session.fetch(:social_auth_nonce) : nil
-    OmniAuth.config.mock_auth[provider.to_sym] = OmniAuth::AuthHash.new(
-      provider: provider, uid: subject, info: { name: "Provider fixture" },
-      credentials: { token: "provider-fixture", expires_at: 1.hour.from_now.to_i },
-      extra: { id_info: { nonce: nonce } },
-    )
-    counted = [Client, ClientExternalIdentity, ClientSignUpFlow, ClientToken]
-    before = counted.map(&:count)
-    if callback_method == :post
-      auth.post("/social/#{provider}/callback", params: { state:, ri: "jp" }, headers: auth_origin_headers)
-    else
-      auth.get("/social/#{provider}/callback", params: { state:, ri: "jp" }, headers: auth_origin_headers)
-    end
+    created = submit_social_intent_callback!(auth:, provider:, subject:, state:, nonce:, callback_method:)
 
     {
-      created: counted.map(&:count).zip(before).map { |after, earlier| after - earlier },
+      created:,
       ceremony: admitted_auth_ceremony_session_for_test(binding.reload),
       transaction_status: authorization_transaction_for_test(binding).reload.status_name,
       social_state_remaining: auth.session.key?(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY),
@@ -1315,6 +1315,23 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       response: [auth.response.status, auth.response.location && URI.parse(auth.response.location).path,
                  auth.response.body,],
     }
+  end
+
+  def submit_social_intent_callback!(auth:, provider:, subject:, state:, nonce:, callback_method:)
+    OmniAuth.config.mock_auth[provider.to_sym] = OmniAuth::AuthHash.new(
+      provider: provider, uid: subject, info: { name: "Provider fixture" },
+      credentials: { token: "provider-fixture", expires_at: 1.hour.from_now.to_i },
+      extra: { id_info: { nonce: nonce } },
+    )
+    counted = [Client, ClientExternalIdentity, ClientSignUpFlow, ClientToken]
+    before = counted.map(&:count)
+    if callback_method == :post
+      auth.post("/social/#{provider}/callback", params: { state:, ri: "jp" }, headers: auth_origin_headers)
+    else
+      auth.get("/social/#{provider}/callback", params: { state:, ri: "jp" }, headers: auth_origin_headers)
+    end
+
+    counted.map(&:count).zip(before).map { |after, earlier| after - earlier }
   end
 
   def register_social_subject!(subject, provider:)

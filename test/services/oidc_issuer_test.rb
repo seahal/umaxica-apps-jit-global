@@ -4,55 +4,66 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcIssuerTest < ActiveSupport::TestCase
-  HostSet = Struct.new(:visa_service, :visa_corporate, :visa_staff)
+  HostSet = Struct.new(:visa_service, :visa_staff)
 
   test "host_for_resource_type normalizes url origins to host components" do
     hosts = HostSet.new(
       "https://www.app.example",
-      "https://www.com.example:8443",
       "http://www.org.example",
     )
     boot_config = { hosts: hosts }
 
     Rails.configuration.x.stub(:boot_config, boot_config) do
       assert_equal "www.app.example", OidcIssuer.host_for_resource_type("client")
-      assert_equal "www.com.example", OidcIssuer.host_for_resource_type("visitor")
       assert_equal "www.org.example", OidcIssuer.host_for_resource_type("operator")
     end
   end
 
   test "host_for_resource_type preserves bare hosts" do
-    hosts = HostSet.new("www.app.example", "www.com.example", "www.org.example")
+    hosts = HostSet.new("www.app.example", "www.org.example")
     boot_config = { hosts: hosts }
 
     Rails.configuration.x.stub(:boot_config, boot_config) do
       assert_equal "www.app.example", OidcIssuer.host_for_resource_type("client")
-      assert_equal "www.com.example", OidcIssuer.host_for_resource_type("visitor")
       assert_equal "www.org.example", OidcIssuer.host_for_resource_type("operator")
     end
   end
 
   test "jwt issuer ids use Visa namespaces" do
     assert_equal "surface:VISA_APP", OidcIssuer.jwt_issuer_id_for_resource_type("client")
-    assert_equal "surface:VISA_COM", OidcIssuer.jwt_issuer_id_for_resource_type("visitor")
     assert_equal "surface:VISA_ORG", OidcIssuer.jwt_issuer_id_for_resource_type("operator")
   end
 
   test "resource type aliases use their canonical issuer hosts and namespaces" do
-    hosts = HostSet.new("app.example", "com.example", "org.example")
+    hosts = HostSet.new("app.example", "org.example")
 
     Rails.configuration.x.stub(:boot_config, { hosts: hosts }) do
       assert_equal "org.example", OidcIssuer.host_for_resource_type("staff")
-      assert_equal "com.example", OidcIssuer.host_for_resource_type("customer")
       assert_equal "surface:VISA_ORG", OidcIssuer.jwt_issuer_id_for_resource_type("staff")
-      assert_equal "surface:VISA_COM", OidcIssuer.jwt_issuer_id_for_resource_type("customer")
+      assert_equal "app.example", OidcIssuer.host_for_resource_type("client")
+      assert_equal "surface:VISA_APP", OidcIssuer.jwt_issuer_id_for_resource_type("client")
     end
   end
 
   test "client resource type aliases normalize before issuer selection" do
     assert_equal "operator", OidcIssuer.resource_type_for_client(Struct.new(:resource_type).new("staff"))
-    assert_equal "visitor", OidcIssuer.resource_type_for_client(Struct.new(:resource_type).new("customer"))
     assert_equal "client", OidcIssuer.resource_type_for_client(Struct.new(:resource_type).new("client"))
+    assert_raises(ArgumentError) do
+      OidcIssuer.resource_type_for_client(Struct.new(:resource_type).new("customer"))
+    end
+  end
+
+  test "resource type values outside the app and org contract are refused" do
+    [nil, "", "unknown", "visitor", "customer"].each do |resource_type|
+      assert_raises(ArgumentError) { OidcIssuer.host_for_resource_type(resource_type) }
+      assert_raises(ArgumentError) { OidcIssuer.jwt_issuer_id_for_resource_type(resource_type) }
+    end
+
+    [nil, "", "unknown", "visitor", "customer"].each do |resource_type|
+      assert_raises(ArgumentError) do
+        OidcIssuer.resource_type_for_client(Struct.new(:resource_type).new(resource_type))
+      end
+    end
   end
 
   test "issuer URLs preserve public origins and add the local development port" do

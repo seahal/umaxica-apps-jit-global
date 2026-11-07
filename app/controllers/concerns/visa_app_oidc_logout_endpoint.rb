@@ -10,6 +10,7 @@ module VisaAppOidcLogoutEndpoint
   include SignOutNotice
   include SignOidcLogout
   include ::SurfaceInertiaPage
+  include ::RegisteredRpFormTargets
 
   PREFERENCE_WRITE_CONTEXT = {
     surface_key: "visa/app",
@@ -44,6 +45,8 @@ module VisaAppOidcLogoutEndpoint
   # confirmation, so both the confirmation and the completion path render the same Inertia
   # page here.
   def render_oidc_end_session_confirmation
+    # The confirmation answers with a redirect through Jump to the RP's post-logout URI.
+    allow_registered_rp_form_targets!(realm: "client", uri_kind: :post_logout)
     render inertia: "visa/app/oidc/logouts/show", props: sign_out_edit_page_props, status: :ok
   end
 

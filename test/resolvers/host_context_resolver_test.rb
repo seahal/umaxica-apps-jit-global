@@ -33,9 +33,9 @@ class HostContextResolverTest < ActiveSupport::TestCase
     assert_equal :dev, context.surface
   end
 
-  test "falls back through Core surface defaults" do
+  test "keeps an unrecognized host outside the supported surfaces" do
     context = HostContextResolver.call(Request.new("example.test"))
 
-    assert_equal CoreSurface::DEFAULT, context.surface
+    assert_equal :unknown, context.surface
   end
 end

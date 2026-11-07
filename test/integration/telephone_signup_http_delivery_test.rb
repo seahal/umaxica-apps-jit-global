@@ -4,6 +4,8 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
+  include ActiveSupport::Testing::TimeHelpers
+
   include ActiveJob::TestHelper
   include SignInFlowCleanup
   include SignUpJourneyCleanup
@@ -273,13 +275,58 @@ class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
 
     assert_equal 200, browser.response.status
     csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-    assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-      browser.patch(
-        otp_uri.request_uri,
-        params: { :client_telephone => { pass_code: "123456" }, "cf-turnstile-response" => "test" },
-        headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf },
+    registered_props = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text).fetch("props")
+    resend = registered_props.fetch("otp_resend")
+
+    assert_equal I18n.t("otp.resend.button"), resend.fetch("messages").fetch("button_label")
+    delivery_count_before_resend = enqueued_jobs.count { |job| job.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    browser.post(
+      resend.fetch("endpoint"),
+      params: { state: resend.fetch("state") },
+      as: :json,
+      headers: {
+        "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf,
+      },
+    )
+
+    assert_equal 429, browser.response.status
+    assert_not browser.response.parsed_body.fetch("resendable")
+    assert_operator browser.response.parsed_body.fetch("retry_after"), :>, 0
+    assert_equal delivery_count_before_resend,
+                 enqueued_jobs.count { |job| job.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    resend_at = Time.current + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+    travel_to(resend_at) do
+      browser.post(
+        resend.fetch("endpoint"),
+        params: { state: resend.fetch("state") },
+        as: :json,
+        headers: {
+          "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf,
+        },
       )
     end
+
+    assert_equal 200, browser.response.status
+    assert_equal({ "resendable" => true, "retry_after" => 0 }, browser.response.parsed_body)
+    assert_equal delivery_count_before_resend,
+                 enqueued_jobs.count { |job| job.fetch(:job) == Outbound::SmsDeliveryJob }
+
+    browser.patch(
+      otp_uri.request_uri,
+      params: { :client_telephone => { pass_code: "123456" }, "cf-turnstile-response" => "test" },
+      headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf },
+    )
+
+    assert_equal 422, browser.response.status
+    registered_props = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text).fetch("props")
+    registered_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+
+    assert_includes registered_props.fetch("errors").join(" "),
+                    I18n.t("sign.app.registration.telephone.update.invalid_code")
+    assert_equal "auth/app/sign/up/telephones/edit", registered_page.fetch("component")
+    assert_equal "client_telephone", registered_props.fetch("scope")
     assert_equal candidate_facts, candidate.reload.attributes
     assert_equal candidate_owner_facts, Client.find(candidate.user_id).reload.attributes
     assert_equal flow_facts, flow.reload.attributes

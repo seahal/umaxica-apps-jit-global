@@ -9,7 +9,7 @@
 # `AuthenticationJwtConfiguration` keep working via the
 # backward-compatibility alias defined in `AuthenticationBase`.
 module AuthenticationJwtConfiguration
-  VALID_RESOURCE_TYPES = %w(client operator visitor).freeze
+  VALID_RESOURCE_TYPES = %w(client operator).freeze
 
   def self.leeway_seconds
     SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS
@@ -28,11 +28,8 @@ module AuthenticationJwtConfiguration
     ENV.fetch("AUTH_JWT_#{normalized_resource_type.upcase}_CLIENT_ID")
   end
 
-  # Audience is a resource-type boundary: a visitor token must not validate where
-  # an operator token is expected. Falling back to a single shared literal when
-  # the environment is unset silently collapses that boundary for every resource
-  # type at once, so the missing configuration is named instead. `issuer` above
-  # already fails this way.
+  # Audience is a resource-type boundary: a client token must not validate where
+  # an operator token is expected. Missing configuration fails at the named key.
   def self.audiences(resource_type = nil)
     normalized_resource_type = normalize_resource_type(resource_type)
     if normalized_resource_type.nil?

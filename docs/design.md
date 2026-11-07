@@ -34,6 +34,13 @@ Identity, Preference, Switcher, Logout is the authenticated menu ordering when e
 provides those destinations. This presentation work does not create absent props, fetch identity,
 add authentication options, or move ceremony cancellation into generic navigation.
 
+Relying-party surfaces (Base, Core, Warp, Palm and Edit; not their anonymous com, dev or net
+surfaces) show the visitor's sign-in state at the right of the header, from
+`chrome.account_navigation`, in one of three states: a sign-up/sign-in link to the surface's own
+sign-in entry when signed out; links to Base and to sign out when signed in (Base omits the link to
+itself); and nothing on the surface's own sign-in, sign-out and OIDC callback pages, which are the
+procedure those links would start. Auth and Visa are that procedure and do not show it.
+
 ## Layout and typography
 
 The shell owns outer gutters: 16px on small screens, 24px from 640px, and the main vertical

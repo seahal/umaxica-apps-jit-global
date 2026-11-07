@@ -129,7 +129,7 @@ module Publishing
     test "revision and version bodies must be JSON objects" do
       entry = publishing_draft(audience: "app", surface: "docs", slug: "body-shape", title: "Body Shape")
 
-      %w("a string" [1,2] 12 true null).each do |body|
+      ['"a', 'string"', '"a string"', "[1,2]", "12", "true", "null"].each do |body|
         assert_database_rejects do
           @connection.execute(<<~SQL.squish)
             INSERT INTO publishing_entry_revisions

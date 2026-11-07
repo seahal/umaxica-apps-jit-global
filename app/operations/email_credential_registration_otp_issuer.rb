@@ -27,7 +27,8 @@ class EmailCredentialRegistrationOtpIssuer
                           browser_nonce: browser_nonce,
                         ) do
                           issue_locked(
-                            actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction,
+                            actor, token, email, transaction_model, pending_status, browser_nonce,
+                            bootstrap_transaction,
                             device_session:,
                           )
                         end || result(:unavailable)

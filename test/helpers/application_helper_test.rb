@@ -130,6 +130,12 @@ class ApplicationHelperTest < ActionView::TestCase
     end
   end
 
+  test "edge_host refuses an unrecognized surface instead of using the corporate host" do
+    stub_request_host("unknown.example.test")
+
+    assert_raises(ArgumentError) { edge_host }
+  end
+
   test "edge_host resolves service edge host for user surface" do
     stub_request_host(ENV["MAIN_SERVICE_URL"])
 

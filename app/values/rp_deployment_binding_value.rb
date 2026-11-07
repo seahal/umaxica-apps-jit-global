@@ -4,7 +4,7 @@
 # Trusted deployment binding for Browser RP client identifiers (one.md section 5.1, R4-WU01/02A).
 #
 # Every concrete Client ID is exactly eleven characters: `<family>-<realm>-<scope>`. Regional
-# families (core, warp, palm) take the scope of this deployment's region; Base, Edit and Tech are
+# families (Core, Warp, Palm) take the scope of this deployment's region; Base, Edit and Tech are
 # worldwide (`ww`) regardless of where they are placed in development.
 #
 # The region comes only from the process environment set by the trusted launcher
@@ -18,9 +18,9 @@ class RpDeploymentBindingValue
   WORLDWIDE = "ww"
 
   # Family-realm pairs whose client scope is the deployment region.
-  REGIONAL_RPS = %w(core-app core-com core-org warp-app warp-com warp-org palm-app).freeze
+  REGIONAL_RPS = %w(core-app core-org warp-app warp-org palm-app).freeze
   # Family-realm pairs that are always worldwide.
-  WORLDWIDE_RPS = %w(base-app base-com base-org edit-org tech-org).freeze
+  WORLDWIDE_RPS = %w(base-app base-org edit-org tech-org).freeze
 
   class UnknownRegion < ArgumentError; end
 
@@ -46,7 +46,7 @@ class RpDeploymentBindingValue
       raise UnknownRp, "unknown RP family/realm: #{family_realm.inspect}"
     end
 
-    # The full declared catalog (5 worldwide + 7 per region = 19 for JP+US). Metadata only: a US
+    # The full declared catalog (4 worldwide + 5 per region = 14 for JP+US). Metadata only: a US
     # entry is declared, not provisioned or active.
     def catalog
       WORLDWIDE_RPS.map { |key| "#{key}-#{WORLDWIDE}" } +

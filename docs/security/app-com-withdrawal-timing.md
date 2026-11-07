@@ -1,7 +1,9 @@
-# App and Com Withdrawal Timing
+# App Withdrawal Timing
 
-Client and Visitor withdrawal confirmation snapshots three deadlines: recovery after one hour, early
-irreversible termination after seven days, and normal retention purge eligibility after 31 days.
+Client withdrawal confirmation snapshots three deadlines: recovery after one hour, early irreversible
+termination after seven days, and normal retention purge eligibility after 31 days. The existing
+`UMAXICA_APP_COM_WITHDRAWAL_*` environment-key names are retained for this Client policy; no Visitor
+withdrawal caller remains.
 Recovery and early-termination timestamps are persisted on the principal; the existing
 `purge_eligible_at` remains the retention deadline. Previously confirmed rows are never shortened by
 a later configuration change.

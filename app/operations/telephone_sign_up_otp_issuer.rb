@@ -143,13 +143,13 @@ class TelephoneSignUpOtpIssuer
       if telephone.binding_finalized_at || telephone.binding_released? || !telephone.accessible?(now)
         return refused(:inactive_candidate)
       end
-      return refused(:registered_destination) if registered_destination
       return refused(:locked) if telephone.locked?(now: now)
 
       sent_at = telephone.otp_last_sent_at
       if sent_at && sent_at != -Float::INFINITY && sent_at > now - TelephoneOtpPolicy::SEND_COOLDOWN
         return refused(:rate_limited)
       end
+      return refused(:registered_destination) if registered_destination
 
       issue_bound_transaction(flow, telephone, owner, transaction_model)
     end

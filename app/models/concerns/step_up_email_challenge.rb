@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# APP/COM includers provide email_transaction_model and email_session_token. This row owns code
+# APP includers provide email_transaction_model and email_session_token. This row owns code
 # generations and one-time proof; actor credential validity and durable failures are checked by
 # the write operation. Delivery state records transport outcome independently of code consumption.
 module StepUpEmailChallenge

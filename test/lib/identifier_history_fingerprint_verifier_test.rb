@@ -8,7 +8,7 @@ require "digest"
 class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  %w(app com org).each do |realm|
+  %w(app org).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} history normalizes candidates and pins salted production Argon2id" do
         identifier, equivalent, other =
@@ -41,7 +41,7 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
         assert_not Argon2::Password.verify_password(identifier, first), "Argon2 must not hash raw normalized PII"
         assert_not Argon2::Password.verify_password(Digest::SHA256.hexdigest(identifier), first),
                    "Unkeyed SHA must not substitute for the dedicated history HMAC"
-        %w(app com org).reject { |candidate| candidate == realm }.each do |foreign_realm|
+        %w(app org).reject { |candidate| candidate == realm }.each do |foreign_realm|
           assert_not IdentifierHistoryFingerprintVerifier.matches?(
             fingerprint: first, identifier:, realm: foreign_realm, channel:,
           ), "Fingerprint must not match another realm"
@@ -93,8 +93,8 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
         original_history = ENV.fetch(history_key)
         fingerprint = IdentifierHistoryFingerprintVerifier.create(identifier:, realm:, channel:)
         %w(
-          APP_EMAIL_ADDRESS_HMAC_KEY COM_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
-          APP_TELEPHONE_NUMBER_HMAC_KEY COM_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
+          APP_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
+          APP_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
         ).each do |live_key|
           ENV[history_key] = ENV.fetch(live_key)
 
@@ -113,8 +113,8 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
         original_history = ENV.fetch(history_key)
         ENV[history_key] = "synthetic-history-live-collision"
         %i(
-          APP_EMAIL_ADDRESS_HMAC_KEY COM_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
-          APP_TELEPHONE_NUMBER_HMAC_KEY COM_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
+          APP_EMAIL_ADDRESS_HMAC_KEY ORG_EMAIL_ADDRESS_HMAC_KEY
+          APP_TELEPHONE_NUMBER_HMAC_KEY ORG_TELEPHONE_NUMBER_HMAC_KEY
         ).each do |live_key|
           configured_key = ->(name) { (name == live_key) ? ENV.fetch(history_key) : nil }
 
@@ -157,16 +157,15 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
 
   %w(email telephone).each do |channel|
     test "#{channel} history remains realm domain separated even with equal configured keys" do
-      keys = %w(APP_EMAIL_HISTORY_KEY COM_EMAIL_HISTORY_KEY ORG_EMAIL_HISTORY_KEY
-                APP_TELEPHONE_HISTORY_KEY COM_TELEPHONE_HISTORY_KEY ORG_TELEPHONE_HISTORY_KEY)
+      keys = %w(APP_EMAIL_HISTORY_KEY ORG_EMAIL_HISTORY_KEY APP_TELEPHONE_HISTORY_KEY ORG_TELEPHONE_HISTORY_KEY)
       original = keys.index_with { |key| ENV.fetch(key) }
       keys.each { |key| ENV[key] = "same-test-history-key-for-domain-separation" }
       identifier = (channel == "email") ? "history@example.test" : "+819012345678"
-      %w(app com org).each do |realm|
+      %w(app org).each do |realm|
         fingerprint = IdentifierHistoryFingerprintVerifier.create(identifier:, realm:, channel:)
 
         assert IdentifierHistoryFingerprintVerifier.matches?(fingerprint:, identifier:, realm:, channel:)
-        %w(app com org).reject { |candidate| candidate == realm }.each do |foreign_realm|
+        %w(app org).reject { |candidate| candidate == realm }.each do |foreign_realm|
           assert_not IdentifierHistoryFingerprintVerifier.matches?(
             fingerprint:, identifier:, realm: foreign_realm, channel:,
           ), "Realm domain binding must not rely solely on different secrets or random salts"
@@ -178,7 +177,7 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
   end
 
   test "missing unknown empty non scalar and NUL realm or channel are never inferred" do
-    [nil, "", " ", "unknown", "app\0", 0, false, [], {}].each do |realm|
+    [nil, "", " ", "unknown", "visitor", "customer", "com", "app\0", 0, false, [], {}].each do |realm|
       assert_raises(ArgumentError) do
         IdentifierHistoryFingerprintVerifier.create(identifier: "history@example.test", realm:, channel: "email")
       end

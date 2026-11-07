@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 module CoreSurface
-  DEFAULT = :com
+  DEFAULT = :unknown
   SURFACES = %i(app com org net dev).freeze
 
   module_function

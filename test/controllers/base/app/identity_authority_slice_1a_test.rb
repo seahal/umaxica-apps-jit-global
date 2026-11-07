@@ -109,7 +109,6 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
       if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
-        when "visitor" then "COM"
         else "APP"
         end
       elsif normalized.include?(".org") || normalized.include?("org.")

@@ -2,9 +2,8 @@
 
 ## Purpose
 
-This document records the accepted authenticated actor naming for surfaces that have completed the
-runtime rename. These names are runtime contracts for controllers, current context, tokens,
-policies, and tests.
+This document records current authenticated actor names for controllers, current context, tokens,
+policies, and tests. The `com` surface is public and has no authenticated actor.
 
 ## Surface Actors
 
@@ -12,7 +11,6 @@ policies, and tests.
 | ------- | ------------------- | ------------------ | ------------------ | ---------------- | ------- |
 | `app`   | `Client`            | `client`           | `current_client`   | `ClientPolicy`   | Current |
 | `org`   | `Operator`          | `operator`         | `current_operator` | `OperatorPolicy` | Current |
-| `com`   | `Visitor`           | `visitor`          | `current_visitor`  | `VisitorPolicy`  | Current |
 
 ## Current Migration State
 
@@ -21,7 +19,8 @@ are:
 
 - `app`: `User` was renamed to `Client`.
 - `org`: `Staff` was renamed to `Operator`.
-- `com`: `Customer` was renamed to `Visitor`.
+- The earlier `Customer` to `Visitor` rename applied to the former authenticated `com` actor. That
+  actor and its sign-in surface are retired; `Visitor` is not a current authentication actor.
 
 The `app` authenticated actor is `Client`. Actor-owned credential, preference, ticket, signal,
 occurrence, and chronicle models use Rails-conventional table names such as `clients` and
@@ -51,8 +50,8 @@ The org-principal workspace account linked to the authenticated `Operator` is
 
 ## Surface, Actor, and Message Vocabulary
 
-`app`, `org`, and `com` are UI and routing surfaces. They are not actor types. Each surface has one
-authenticated actor type: `Client` for `app`, `Operator` for `org`, and `Visitor` for `com`.
+`app`, `org`, and `com` are UI and routing surfaces. They are not actor types. Authenticated actors
+are `Client` for `app` and `Operator` for `org`; the public `com` surface has no authenticated actor.
 Unauthenticated traffic should be described as `guest` or `unauthenticated`, not as a `Visitor`.
 
 Use the message names consistently:

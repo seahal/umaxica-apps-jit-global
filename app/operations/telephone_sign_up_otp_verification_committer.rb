@@ -48,13 +48,19 @@ class TelephoneSignUpOtpVerificationCommitter
         end
 
       if telephone.is_a?(ClientTelephone) && telephone.user_id == owner.id
-        AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: owner, &verify)
+        verify_with_available_destination(telephone, owner, &verify)
       else
         verify.call
       end
     end
 
     private
+
+    def verify_with_available_destination(telephone, owner)
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: telephone, owner: owner) { yield }
+    rescue AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
+      result(:invalid_code, telephone)
+    end
 
     def components(flow, telephone)
       case flow

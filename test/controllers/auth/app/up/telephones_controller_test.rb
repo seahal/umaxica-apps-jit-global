@@ -1794,11 +1794,17 @@ module Auth::App::Up
       owner_facts = visitor.reload.attributes
       token_count = ClientToken.count
 
-      assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-        patch target.request_uri,
-              params: { client_telephone: { pass_code: "123456" }, "cf-turnstile-response": "test" },
-              headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
-      end
+      patch target.request_uri,
+            params: { client_telephone: { pass_code: "123456" }, "cf-turnstile-response": "test" },
+            headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "HTTPS" => "on" }
+
+      assert_response :unprocessable_content
+      telephone_props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+      assert_includes telephone_props.fetch("errors").join(" "),
+                      I18n.t("sign.app.registration.telephone.update.invalid_code")
+      assert_equal "auth/app/sign/up/telephones/edit", inertia_component
+      assert_equal "client_telephone", inertia_props.fetch("scope")
 
       assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
       assert_equal owner_facts, visitor.reload.attributes
@@ -2145,8 +2151,7 @@ class Auth::App::Up::TelephonesControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

@@ -34,6 +34,17 @@ module SurfaceChrome
     "visa" => { family_label: "VISA", banner_domain: nil, footer_navigation: false },
   }.freeze
 
+  # Relying-party surfaces whose header shows the visitor's sign-in state (see
+  # chrome_account_navigation).
+  ACCOUNT_NAVIGATION_SURFACES = [
+    %w(base app), %w(base org),
+    %w(core app), %w(core org), %w(warp app), %w(warp org), %w(palm app), %w(edit org),
+  ].freeze
+
+  # Controller namespaces under a relying-party surface (`<family>/<surface>/<namespace>/...`) that
+  # are the sign-in/sign-out procedure itself; their pages show no account navigation.
+  ACCOUNT_PROCEDURE_NAMESPACES = %w(sign sign_outs oidc).freeze
+
   # The operational surfaces are mounted with a route prefix that does not match their controller
   # module, so route helpers cannot be composed from the module name alone.
   SURFACE_ROUTE_NAMES = { "dev" => "developer", "net" => "network" }.freeze
@@ -73,6 +84,7 @@ module SurfaceChrome
       footer_navigation: configuration.fetch(:footer_navigation) ? chrome_footer_navigation : nil,
       cookie_controls: chrome_cookie_controls,
       theme_controls: chrome_theme_controls,
+      account_navigation: chrome_account_navigation,
       copyright: chrome_copyright,
     }
     chrome[:locale] = I18n.locale.to_s if configuration.fetch(:surface) == "com"
@@ -258,6 +270,88 @@ module SurfaceChrome
         dark: chrome_t("#{scope}.options.dark"),
       },
     }
+  end
+
+  # The relying-party surfaces show the visitor where they stand, in one of three states:
+  #   - signed out: a way into the sign-up/sign-in entry (which hands off to the OP);
+  #   - signed in: the way to Base and to sign out;
+  #   - nothing: on the sign-in, sign-out and OIDC callback pages themselves, which are the
+  #     procedure the links would start, so offering it again there only invites a restart.
+  # Base shows the same states without its own Base link. Auth and Visa are the procedure, and the
+  # anonymous surfaces (Base/Warp com, Core dev/net) have no sign-in at all, so they publish nothing.
+  def chrome_account_navigation
+    family = chrome_configuration.fetch(:family)
+    surface = chrome_configuration.fetch(:surface)
+    return nil unless ACCOUNT_NAVIGATION_SURFACES.include?([family, surface])
+    return nil if ACCOUNT_PROCEDURE_NAMESPACES.include?(controller_path.split("/").third)
+
+    # Carry the visitor's region and display context the same way the cookie settings link does;
+    # not every controller that renders this chrome resolves a region identifier of its own.
+    region = request.query_parameters.slice(*PREFERENCE_QUERY_KEYS).symbolize_keys
+    if chrome_logged_in?
+      {
+        label: chrome_t("layouts.shared.account_navigation.label"),
+        signed_in: true,
+        links: [
+          # On Base itself the Base link would point at the page the visitor is already on.
+          (family == "base") ? nil : {
+            label: chrome_t("layouts.shared.account_navigation.base"),
+            href: chrome_account_base_url(surface, region),
+          },
+          {
+            label: chrome_t("layouts.shared.account_navigation.sign_out"),
+            href: chrome_account_sign_out_path(family, surface, region),
+          },
+        ].compact,
+      }
+    else
+      {
+        label: chrome_t("layouts.shared.account_navigation.label"),
+        signed_in: false,
+        links: [
+          {
+            label: chrome_t("layouts.shared.account_navigation.sign_up_or_in"),
+            href: chrome_account_sign_in_path(family, surface, region),
+          },
+        ],
+      }
+    end
+  end
+
+  def chrome_account_sign_in_path(family, surface, options)
+    case [family, surface]
+    when %w(base app) then base_app_sign_show_path(options)
+    when %w(base org) then base_org_sign_show_path(options)
+    when %w(core app) then core_app_sign_show_path(options)
+    when %w(core org) then core_org_sign_show_path(options)
+    when %w(warp app) then warp_app_sign_show_path(options)
+    when %w(warp org) then warp_org_sign_show_path(options)
+    when %w(palm app) then palm_app_sign_show_path(options)
+    when %w(edit org) then edit_org_sign_show_path(options)
+    else raise ArgumentError, "no sign-in entry for #{family}/#{surface}"
+    end
+  end
+
+  def chrome_account_sign_out_path(family, surface, options)
+    case [family, surface]
+    when %w(base app) then new_base_app_sign_out_path(options)
+    when %w(base org) then new_base_org_sign_out_path(options)
+    when %w(core app) then new_core_app_sign_out_path(options)
+    when %w(core org) then new_core_org_sign_out_path(options)
+    when %w(warp app) then new_warp_app_sign_out_path(options)
+    when %w(warp org) then new_warp_org_sign_out_path(options)
+    when %w(palm app) then new_palm_app_sign_out_path(options)
+    when %w(edit org) then new_edit_org_sign_out_path(options)
+    else raise ArgumentError, "no sign-out entry for #{family}/#{surface}"
+    end
+  end
+
+  def chrome_account_base_url(surface, options)
+    case surface
+    when "app" then base_app_dashboard_url(**options, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
+    when "org" then base_org_dashboard_url(**options, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"))
+    else raise ArgumentError, "no Base destination for surface #{surface.inspect}"
+    end
   end
 
   def chrome_copyright

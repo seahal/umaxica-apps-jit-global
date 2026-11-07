@@ -183,34 +183,14 @@ class VisaSensitiveAdmissionIssuer
     existing = find_existing_admission(config, admission_model)
     return issuance_for(existing, config) if existing
 
-    oidc_transaction = OidcAuthorizationTransactionCoordinator.issue!(
-      surface:,
-      intent: "step_up",
-      params: request_params,
-      now:,
-      ttl: 15.minutes,
-    ).transaction
+    oidc_transaction = issue_oidc_authorization_transaction!(now:)
     purpose = request_params.fetch(:purpose).to_s
     provider = request_params.fetch(:provider).to_s
-    requirement, return_to = auth_admission_requirement(config, purpose:, provider:)
-    auth_issuance = BaseStepUpAdmissionIssuer.call!(
-      actor:, token:, requirement:, return_to:, base_browser_digest:,
-      base_token: token, step_up_evidence: evidence,
-    )
-    raise InvalidRequest unless auth_issuance.is_a?(BaseAuthAdmissionCoordinator::Issuance)
-
-    binding = config.fetch(:binding_model).find_by!(entry_ref: auth_issuance.reference)
+    auth_issuance, binding = issue_auth_admission!(config, evidence:, purpose:, provider:)
     expires_at = [now + 15.minutes, rp_session_expires_at].min
     raise InvalidRequest unless expires_at > now
 
-    social_transaction =
-      if purpose == "social_link"
-        ClientSocialCeremonyTransaction.create_transaction!(
-          actor_ref: actor.public_id, session_ref: token.device_session_record!.public_id,
-          operation: "link", provider:,
-          expires_at:, now:,
-        )
-      end
+    social_transaction = create_social_transaction(purpose:, provider:, expires_at:, now:)
     admission_attributes = {
       public_ref: PublicId.generate,
       oidc_authorization_transaction: oidc_transaction,
@@ -237,6 +217,38 @@ class VisaSensitiveAdmissionIssuer
     admission_attributes[:social_ceremony_transaction] = social_transaction if social_transaction
     admission = admission_model.create!(admission_attributes)
     issuance_for(admission, config, auth_entry_ref: auth_issuance.reference)
+  end
+
+  def issue_oidc_authorization_transaction!(now:)
+    OidcAuthorizationTransactionCoordinator.issue!(
+      surface:,
+      intent: "step_up",
+      params: request_params,
+      now:,
+      ttl: 15.minutes,
+    ).transaction
+  end
+
+  def issue_auth_admission!(config, evidence:, purpose:, provider:)
+    requirement, return_to = auth_admission_requirement(config, purpose:, provider:)
+    auth_issuance = BaseStepUpAdmissionIssuer.call!(
+      actor:, token:, requirement:, return_to:, base_browser_digest:,
+      base_token: token, step_up_evidence: evidence,
+    )
+    raise InvalidRequest unless auth_issuance.is_a?(BaseAuthAdmissionCoordinator::Issuance)
+
+    binding = config.fetch(:binding_model).find_by!(entry_ref: auth_issuance.reference)
+    [auth_issuance, binding]
+  end
+
+  def create_social_transaction(purpose:, provider:, expires_at:, now:)
+    return unless purpose == "social_link"
+
+    ClientSocialCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.device_session_record!.public_id,
+      operation: "link", provider:,
+      expires_at:, now:,
+    )
   end
 
   def current_step_up_requirement(config)
@@ -303,10 +315,24 @@ class VisaSensitiveAdmissionIssuer
     authorization = authorization_model.find(admission.oidc_authorization_transaction_id)
     expected_subject = OidcSubject.for(actor, resource_type: config.fetch(:resource_type))
     now = owner.database_now
-    valid = admission.status == "issued" && authorization.pending? &&
+    valid = existing_admission_state_matches?(admission, authorization, now) &&
+      existing_authorization_request_matches?(authorization, config) &&
+      existing_admission_binding_matches?(admission, expected_subject)
+    raise InvalidRequest unless valid
+
+    admission
+  rescue ActiveRecord::RecordNotFound, KeyError
+    raise InvalidRequest
+  end
+
+  def existing_admission_state_matches?(admission, authorization, now)
+    admission.status == "issued" && authorization.pending? &&
       admission.expires_at > now && admission.rp_session_expires_at > now &&
-      !authorization.expired?(now:) && !authorization.login_challenge_expired?(now:) &&
-      authorization.surface == surface && authorization.client_id == config.fetch(:client_id) &&
+      !authorization.expired?(now:) && !authorization.login_challenge_expired?(now:)
+  end
+
+  def existing_authorization_request_matches?(authorization, config)
+    authorization.surface == surface && authorization.client_id == config.fetch(:client_id) &&
       authorization.redirect_uri == request_params.fetch(:redirect_uri) &&
       authorization.response_type == request_params.fetch(:response_type) &&
       authorization.scope == request_params.fetch(:scope) &&
@@ -315,17 +341,15 @@ class VisaSensitiveAdmissionIssuer
       authorization.code_challenge == request_params.fetch(:code_challenge) &&
       authorization.code_challenge_method == request_params.fetch(:code_challenge_method) &&
       authorization.oidc_prompt == OidcAuthorizeRequestResolver.normalize_prompt(request_params[:prompt]) &&
-      authorization.oidc_max_age == OidcAuthorizeRequestResolver.normalize_max_age(request_params[:max_age]) &&
-      admission.purpose == request_params.fetch(:purpose).to_s &&
+      authorization.oidc_max_age == OidcAuthorizeRequestResolver.normalize_max_age(request_params[:max_age])
+  end
+
+  def existing_admission_binding_matches?(admission, expected_subject)
+    admission.purpose == request_params.fetch(:purpose).to_s &&
       admission.provider == request_params.fetch(:provider).to_s &&
       admission.actor_subject == expected_subject && admission.grant_sid == grant.public_id &&
       admission.rp_session_ref == rp_session_ref && admission.rp_session_expires_at == rp_session_expires_at &&
       admission.browser_binding_digest == base_browser_digest && event_matches?(admission, evidence_from_payload!)
-    raise InvalidRequest unless valid
-
-    admission
-  rescue ActiveRecord::RecordNotFound, KeyError
-    raise InvalidRequest
   end
 
   def event_matches?(admission, evidence)

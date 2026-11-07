@@ -64,9 +64,9 @@ class ActorTest < ActiveSupport::TestCase
   end
 
   test "whoami aliases actor type" do
-    Actor.actor_type = :visitor
+    Actor.actor_type = :client
 
-    assert_equal :visitor, Actor.whoami
+    assert_equal :client, Actor.whoami
   end
 
   test "tld stores surface label" do
@@ -311,12 +311,12 @@ class ActorTest < ActiveSupport::TestCase
   end
 
   test "coerce merges a to_h-able object onto the empty baseline" do
-    obj = Struct.new(:actor_type, :tld, :surface, :transport, :channel).new(:visitor, :com, :acme, :cookie, :browser)
+    obj = Struct.new(:actor_type, :tld, :surface, :transport, :channel).new(:client, :app, :acme, :cookie, :browser)
 
     result = ActorValuesContext.coerce(obj)
 
-    assert_equal :visitor, result.actor_type
-    assert_equal :com, result.tld
+    assert_equal :client, result.actor_type
+    assert_equal :app, result.tld
     assert_equal :acme, result.surface
     assert_predicate result, :cookie?
     assert_predicate result, :browser?

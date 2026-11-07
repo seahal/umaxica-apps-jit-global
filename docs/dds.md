@@ -14,15 +14,15 @@ The current OIDC authority is the Visa surface, with one host per realm: `visa.u
 `visa.umaxica.org`. Visa owns discovery, JWKS, authorization, token, UserInfo, revocation,
 end-session logout, sign-out result, and the OP-side sign-in limitation routes.
 
-Base remains the browser relying party and identity/session-management surface at `www.umaxica.app`,
-`www.umaxica.com`, and `www.umaxica.org`. Base owns the RP callback, RP cookies, dashboard,
-identity, verification, and RP-initiated logout routes. Visa and Base use host-only cookies and do
-not share a Rails session. Cross-host browser navigation uses the signed Jump return contract; it is
-not a host-name alias or a compatibility route.
+Base remains the browser relying party and identity/session-management surface on app and org. The
+`www.umaxica.com` Base surface remains public for Preference and has no RP session or credential
+routes. Base owns RP callbacks, RP cookies, dashboards, identity, verification, and RP-initiated
+logout on app/org. Visa and Base use host-only cookies and do not share a Rails session. Cross-host
+browser navigation uses the signed Jump return contract; it is not a host-name alias or a
+compatibility route.
 
-The three Visa authorities sign protocol and access credentials with `VISA_APP`, `VISA_COM`, and
-`VISA_ORG` JWT namespaces. Base retains `BASE_APP`, `BASE_COM`, and `BASE_ORG` for its own
-browser-RP/Jump responsibilities. The Rails-side edge catalog is recorded in
+Visa signs protocol and access credentials with `VISA_APP` and `VISA_ORG` JWT namespaces. Base
+retains `BASE_APP` and `BASE_ORG` for its own browser-RP/Jump responsibilities. The Rails-side edge catalog is recorded in
 `docs/operations/jump-rt-visa-edges.md`; the separate Edge/Jump deployment is not changed by this
 repository.
 

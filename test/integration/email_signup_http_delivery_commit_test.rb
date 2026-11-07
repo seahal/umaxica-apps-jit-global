@@ -3,6 +3,8 @@
 require "test_helper"
 
 class EmailSignupHttpDeliveryCommitTest < ActionDispatch::IntegrationTest
+  include ActiveSupport::Testing::TimeHelpers
+
   include ActiveJob::TestHelper
   include SignInFlowCleanup
   include SignUpJourneyCleanup
@@ -149,13 +151,50 @@ class EmailSignupHttpDeliveryCommitTest < ActionDispatch::IntegrationTest
     assert_equal 200, browser.response.status
     csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf }
-    assert_raises(AppRegisteredContactDestinationGuard::RegisteredDestinationIncident) do
-      browser.patch(
-        otp_uri.request_uri,
-        params: { :client_email => { pass_code: "123456" }, "cf-turnstile-response" => "test" },
-        headers:,
+    registered_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+    registered_props = registered_page.fetch("props")
+    resend = registered_props.fetch("otp_resend")
+
+    assert_equal I18n.t("otp.resend.button"), resend.fetch("messages").fetch("button_label")
+    delivery_count_before_resend =
+      enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    browser.post(
+      resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers:,
+    )
+
+    assert_equal 429, browser.response.status
+    assert_not browser.response.parsed_body.fetch("resendable")
+    assert_operator browser.response.parsed_body.fetch("retry_after"), :>, 0
+    assert_equal delivery_count_before_resend,
+                 enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    resend_at = Time.current + EmailOtpPolicy::SEND_COOLDOWN + 1.second
+    travel_to(resend_at) do
+      browser.post(
+        resend.fetch("endpoint"), params: { state: resend.fetch("state") }, as: :json, headers:,
       )
     end
+
+    assert_equal 200, browser.response.status
+    assert_equal({ "resendable" => true, "retry_after" => 0 }, browser.response.parsed_body)
+    assert_equal delivery_count_before_resend,
+                 enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    browser.patch(
+      otp_uri.request_uri,
+      params: { :client_email => { pass_code: "123456" }, "cf-turnstile-response" => "test" },
+      headers:,
+    )
+
+    assert_equal 422, browser.response.status
+    registered_page = JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text)
+    registered_props = registered_page.fetch("props")
+
+    assert_includes registered_props.fetch("errors").join(" "),
+                    I18n.t("sign.app.registration.email.update.invalid_code")
+    assert_equal "auth/app/sign/up/emails/edit", registered_page.fetch("component")
+    assert_equal "client_email", registered_props.fetch("scope")
     assert_empty enqueued_jobs.select { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
     assert_equal candidate_facts, candidate.reload.attributes
     assert_equal candidate_owner_facts, Client.find(candidate.user_id).reload.attributes

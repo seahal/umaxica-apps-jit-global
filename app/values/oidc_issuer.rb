@@ -44,13 +44,13 @@ module OidcIssuer
 
   def host_for_resource_type(resource_type)
     boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    case resource_type.to_s
-    when "operator", "staff"
+    case normalize_resource_type(resource_type)
+    when "operator"
       host_component(boot_hosts.visa_staff)
-    when "visitor", "customer"
-      host_component(boot_hosts.visa_corporate)
-    else
+    when "client"
       host_component(boot_hosts.visa_service)
+    else
+      raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
     end
   end
 
@@ -60,22 +60,28 @@ module OidcIssuer
 
   def jwt_issuer_id_for_resource_type(resource_type)
     namespace =
-      case resource_type.to_s
-      when "operator", "staff" then "VISA_ORG"
-      when "visitor", "customer" then "VISA_COM"
-      else "VISA_APP"
+      case normalize_resource_type(resource_type)
+      when "operator" then "VISA_ORG"
+      when "client" then "VISA_APP"
+      else
+        raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
       end
 
     "surface:#{namespace}"
   end
 
   def resource_type_for_client(client)
-    case client.resource_type.to_s
+    normalize_resource_type(client.resource_type)
+  end
+
+  def normalize_resource_type(resource_type)
+    case resource_type.to_s
     when "operator", "staff" then "operator"
-    when "visitor", "customer" then "visitor"
-    else "client"
+    when "client" then "client"
+    else raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
     end
   end
+  private_class_method :normalize_resource_type
 
   def absolute_url(host_or_url)
     normalized = host_or_url.to_s.strip

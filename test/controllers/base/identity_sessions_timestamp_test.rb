@@ -32,7 +32,7 @@ class BaseIdentitySessionsTimestampTest < ActiveSupport::TestCase
     Actor.preferences = @original_preference
   end
 
-  %i(app com org).each do |surface|
+  %i(app org).each do |surface|
     test "the shared session presenter applies the preference JWT for #{surface}" do
       I18n.with_locale(:en) do
         row = Base::Identity::SessionPresenter.new.present(@record, current: true, surface: surface)
@@ -44,6 +44,14 @@ class BaseIdentitySessionsTimestampTest < ActiveSupport::TestCase
         assert_equal "Current session", row.fetch(:status)
         assert_equal "Normal", row.fetch(:mode) if surface == :org
         assert_not row.key?(:mode) unless surface == :org
+      end
+    end
+  end
+
+  test "the shared session presenter refuses retired and unknown surfaces" do
+    [nil, "", :com, :visitor, :customer, :warp].each do |surface|
+      assert_raises(ArgumentError) do
+        Base::Identity::SessionPresenter.new.present(@record, current: true, surface:)
       end
     end
   end

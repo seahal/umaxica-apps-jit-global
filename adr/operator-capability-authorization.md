@@ -38,9 +38,11 @@ policies. An unknown identifier raises.
 - Being an `Operator` is necessary, never sufficient. No grant means deny.
 - Role names, Bureau ownership, and Bureau administration, delegation, or view grants confer no
   platform capability. A NULL Bureau never means "platform".
-- Every grant is platform-scoped and the realm is part of the fixed identifier, so app and com are
-  granted and revoked independently. There is no wildcard. Adding a capability is a migration: the
-  column carries a CHECK over the catalog.
+- Every grant is platform-scoped and the realm is part of the fixed identifier. Current Support
+  capabilities cover app Clients only. The former COM Visitor read and session-revocation
+  identifiers are no longer in the runtime catalog and fail closed as unknown capabilities. Any
+  persisted legacy rows remain historical data and are not deleted by this route retirement. There
+  is no wildcard. Adding a capability is a migration: the column carries a CHECK over the catalog.
 - Validity is bounded (at most 366 days, finite timestamps), enforced by both the model and the
   `chk_operator_capability_grants_validity_window` CHECK. There is no standing grant.
 - The check reads the database on every request. There is no cache, so a revocation takes effect for
@@ -51,13 +53,13 @@ policies. An unknown identifier raises.
 | Capability                            | Allows                                                                                 |
 | ------------------------------------- | -------------------------------------------------------------------------------------- |
 | `support.console.read`                | Support landing page                                                                   |
-| `support.account.read.{app,com}`      | List and show Clients (app) or Visitors (com) by public id                             |
-| `support.session.revoke.{app,com}`    | Revoke every current session of one Client or Visitor (also needs the read capability) |
-| `enforcement.read.{app,com}`          | List and show the realm's Enforcement Cases, without Step-Up                           |
-| `enforcement.apply.{app,com}`         | Open a Case (also needs read)                                                          |
-| `enforcement.approve.{app,com}`       | Approve a pending Case opened by someone else (also needs read)                        |
-| `enforcement.release.{app,com}`       | End an active Case (also needs read)                                                   |
-| `enforcement.review_appeal.{app,com}` | Decide an appeal (also needs read)                                                     |
+| `support.account.read.app`            | List and show Clients by public id                                                     |
+| `support.session.revoke.app`          | Revoke every current session of one Client (also needs the read capability)            |
+| `enforcement.read.app`                | List and show app Enforcement Cases, without Step-Up                                  |
+| `enforcement.apply.app`               | Open an app Case (also needs read)                                                    |
+| `enforcement.approve.app`             | Approve a pending app Case opened by someone else (also needs read)                   |
+| `enforcement.release.app`             | End an active app Case (also needs read)                                              |
+| `enforcement.review_appeal.app`       | Decide an app appeal (also needs read)                                                |
 | `iam.capability.read`                 | List and show grants                                                                   |
 | `iam.capability.grant`                | Grant a capability the granter itself holds                                            |
 | `iam.capability.revoke`               | Revoke a grant                                                                         |
@@ -97,8 +99,8 @@ everything and writes nothing. Output contains only public ids, capability names
 
 | Operation                                     | Capability                                          | Step-Up scope                    | Emergency session    | Audit                                                                       |
 | --------------------------------------------- | --------------------------------------------------- | -------------------------------- | -------------------- | --------------------------------------------------------------------------- |
-| Support landing, client/visitor list and show | read                                                | none                             | allowed (read)       | none                                                                        |
-| Revoke a client's or visitor's sessions       | realm read + revoke                                 | `support_session_revoke`         | refused (no Step-Up) | Chronicle `support.session.revoked` (intent first) and `AccountAccessEvent` |
+| Support landing and client list/show           | read                                                | none                             | allowed (read)       | none                                                                        |
+| Revoke a client's sessions                     | read + revoke                                       | `support_session_revoke`         | refused (no Step-Up) | Chronicle `support.session.revoked` (intent first) and `AccountAccessEvent` |
 | Enforcement list and show                     | realm read                                          | none                             | allowed (read)       | none                                                                        |
 | Open a Case                                   | realm read + apply                                  | `enforcement_case_apply`         | refused              | `enforcement_events` `applied` or `approval_requested`                      |
 | Approve                                       | realm read + approve, not the applier               | `enforcement_case_approve`       | refused              | `approved` (approver), `applied`                                            |
@@ -111,8 +113,8 @@ everything and writes nothing. Output contains only public ids, capability names
 
 Each confirmation screen (`new`) authorizes the capability before it asks for Step-Up, so an
 operator without the capability never starts a ceremony. Each mutating action calls `authorize!` and
-then requires Step-Up in its own body. The Step-Up return-path patterns cover only the app and com
-confirmation screens.
+then requires Step-Up in its own body. The Step-Up return-path patterns cover only the app
+confirmation screen.
 
 The Step-Up path is verified end to end by `test/integration/org_admin_step_up_ceremony_test.rb`:
 confirmation screen, base intent, signed grant, auth passkey ceremony (only the WebAuthn
@@ -187,8 +189,8 @@ names its target class, lookup, policy and rule, Step-Up scope, and the operatio
 
 ### Routes
 
-All on the org host only: `/support`, `/support/{clients,visitors}` (index, show), nested
-`revocations` (new, create, show), `/support/{app,com,org}/enforcement_cases` with nested
+All on the org host only: `/support`, `/support/clients` (index, show), nested `revocations` (new,
+create, show), `/support/{app,org}/enforcement_cases` with nested
 `approval`, `release`, and `appeal_review` (new, create), `/iam`, `/iam/grants` (index, show, new,
 create) with nested `revocation` (new, create). Org membership routes are index and show only. The
 previous `sessions/purge`, `sessions/emergency_revocation`, and unrouted operator session

@@ -5,8 +5,9 @@
 #
 # The checkpoint screen and the age-restricted screen were ERB templates rendered from
 # `SignUpSequenceControllerSupport` and `SignUpSocialCheckBirthdateControllerSupport`. Both of those
-# concerns still serve `auth/com`, so this one overrides only the rendering half for the surface
-# that has migrated; the requirement computation, the policy checks and the statuses are untouched.
+# concerns serve the app sign-up surface, so this one overrides only the rendering half for the
+# surface that needs two distinct page bodies; the requirement computation, policy checks and
+# statuses are untouched.
 #
 # Which requirement sections exist is a server decision taken from the ticket, so a section the
 # visitor cannot act on is absent from the props rather than hidden by the page. Nothing about the

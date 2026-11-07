@@ -69,9 +69,8 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
     else
       render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid"))
     end
-  rescue ClientSecretClaimCommitter::TransactionConflict
-    render plain: t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
-  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+  rescue ClientSecretClaimCommitter::TransactionConflict,
+         Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
     render plain: t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 

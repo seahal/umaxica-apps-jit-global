@@ -7,6 +7,8 @@ class ClientVisaSensitiveAdmission < OpBaseAppRecord
 
   def self.connection_owner = OpBaseAppRecord
 
+  public_class_method :connection_owner
+
   belongs_to :oidc_authorization_transaction, class_name: "ClientOidcAuthorizationTransaction"
   belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction"
   belongs_to :auth_admission_binding, class_name: "ClientAuthAdmissionBinding"

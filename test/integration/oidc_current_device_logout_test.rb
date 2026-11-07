@@ -431,6 +431,61 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
       assert_predicate root.reload, :currently_usable?
     end
 
+    # The continuation answer redirects through Jump to the RP callback, and browsers apply
+    # form-action to every hop, so each registered RP callback origin of this realm must be allowed
+    # on the continuation page; an ordinary Visa page keeps the global policy.
+    test "#{realm} silent authorization continuation allows this realm's registered RP callbacks" do
+      actor = actor_for(realm)
+      root = create_root(config, actor)
+      browser = visa_browser(config, actor, root)
+      resource_type = config.fetch(:resource_type)
+      warp = OidcClientRegistry.find!("warp-#{realm}-jp")
+      warp_callback = URI.parse(warp.redirect_uris_by_realm.fetch(resource_type).first)
+      other_realm_callbacks =
+        OidcClientRegistry.client_ids.flat_map do |client_id|
+          OidcClientRegistry.find!(client_id).redirect_uris_by_realm.except(resource_type).values.flatten
+        end
+      own_realm_callbacks =
+        OidcClientRegistry.client_ids.flat_map do |client_id|
+          OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(resource_type, [])
+        end
+      foreign_origins =
+        (other_realm_callbacks - own_realm_callbacks).map do |uri|
+          parsed = URI.parse(uri)
+          "#{parsed.scheme}://#{parsed.host}"
+        end
+
+      browser.get(
+        "/oauth/authorize", params: {
+          response_type: "code",
+          client_id: warp.client_id,
+          redirect_uri: warp_callback.to_s,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+          code_challenge_method: "S256",
+          scope: "openid",
+          state: "state",
+          nonce: "nonce",
+        },
+      )
+
+      assert_equal 200, browser.response.status
+      form_action = browser.response.headers.fetch("Content-Security-Policy").split(";").map(&:strip)
+        .find { |directive| directive.start_with?("form-action ") }.split(/\s+/).drop(1)
+
+      assert Nokogiri::HTML(browser.response.body).at_css("form#visa-authorization-continuation-form")
+      assert_includes form_action, "#{warp_callback.scheme}://#{warp_callback.host}"
+      assert_includes form_action, Rails.configuration.x.boot_config.fetch(:jump).origin.to_s
+      assert_equal form_action.uniq, form_action
+
+      browser.get("/", params: { ri: "jp" })
+      global_form_action = browser.response.headers.fetch("Content-Security-Policy").split(";").map(&:strip)
+        .find { |directive| directive.start_with?("form-action ") }.split(/\s+/).drop(1)
+
+      assert_not_includes global_form_action, "#{warp_callback.scheme}://#{warp_callback.host}"
+      (foreign_origins - global_form_action).each { |origin| assert_not_includes form_action, origin }
+      assert_empty global_form_action - form_action
+    end
+
     test "#{realm} logout confirmation posts to its separate confirmation endpoint" do
       actor = actor_for(realm)
       root = create_root(config, actor)
@@ -452,6 +507,25 @@ class OidcCurrentDeviceLogoutTest < ActionDispatch::IntegrationTest
         props = JSON.parse(page.text).fetch("props")
 
         assert_equal "/oidc/logout/confirmation?#{{ ri: region }.to_query}", props.fetch("form").fetch("action")
+        # The confirmation answers through Jump to the RP's post-logout URI; browsers apply
+        # form-action to that redirect, so every registered post-logout origin of this realm is
+        # allowed here.
+        form_action = browser.response.headers.fetch("Content-Security-Policy").split(";").map(&:strip)
+          .find { |directive| directive.start_with?("form-action ") }.split(/\s+/).drop(1)
+        post_logout_origins =
+          OidcClientRegistry.client_ids.flat_map do |client_id|
+            client = OidcClientRegistry.find!(client_id)
+            next [] unless client.redirect_uris_by_realm.key?(config.fetch(:resource_type))
+
+            client.post_logout_redirect_uris.map do |uri|
+              parsed = URI.parse(uri)
+              port = (parsed.port == parsed.default_port) ? "" : ":#{parsed.port}"
+              "#{parsed.scheme}://#{parsed.host}#{port}"
+            end
+          end
+
+        assert_predicate post_logout_origins, :present?
+        post_logout_origins.each { |origin| assert_includes form_action, origin }
         browser.get("/oidc/logout", params: { ri: region })
 
         assert_equal 200, browser.response.status

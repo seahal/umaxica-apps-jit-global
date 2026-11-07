@@ -12,12 +12,12 @@ stateDiagram-v2
     Cancelled --> [*]
     Expired --> [*]
     note right of Issued
-        Separate email policy on Client, Visitor and Operator ceremony models.
+        Separate email policy on Client and Operator ceremony models.
         Stored HMAC binds realm, channel, transaction, purpose, actor,
         session, operation, candidate, destination digest, generation and OTP deadline.
         Wrong binding/code never consumes.
         Transport and verification require finite parent and OTP deadlines.
-        APP/COM withdrawal and recovery reentry use this proof and both failure budgets.
+        APP withdrawal and recovery reentry use this proof and both failure budgets.
         Noticed references bind generation; Mailer rechecks after rendering.
         Other legacy HTTP caller migrations remain incomplete.
     end note

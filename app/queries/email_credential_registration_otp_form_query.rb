@@ -34,7 +34,8 @@ class EmailCredentialRegistrationOtpFormQuery
 
       now = ClientEmailCeremonyTransaction.database_now
       device_session = token.device_session_record
-      actor.login_allowed? && actor.accessible?(actor.class.database_now) && email.accessible?(email.class.database_now) &&
+      actor.login_allowed? && actor.accessible?(actor.class.database_now) &&
+        email.accessible?(email.class.database_now) &&
         token.active_status?(now) && device_session&.usable? && device_session.current_refresh_token_id == token.id &&
         AppRegisteredContactDestinationGuard.registered_by_other_owner?(contact: email, owner: actor)
     end

@@ -14,13 +14,12 @@ module Base
 
         private
 
-        def consume_oidc_pt
-          destination = super
-          (destination == "/") ? base_org_dashboard_path(ri: params[:ri]) : destination
-        end
-
         def oidc_client_id
           "base-org-ww"
+        end
+
+        def oidc_rp_default_landing_path
+          base_org_dashboard_path(ri: params[:ri])
         end
       end
     end

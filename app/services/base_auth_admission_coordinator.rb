@@ -830,29 +830,55 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         model:, transaction:, surface:, purpose:, base_browser_nonce:, base_token:, restart_of:,
       ) if restart_of.present?
 
-      existing = model.lock.find_by(
+      existing = find_active_binding(model, parent_attributes, purpose)
+      return reuse_active_binding!(
+        existing, resolved_intent, base_token, surface, base_browser_nonce, base_browser_digest, now,
+      ) if existing
+
+      redeemed = find_redeemed_bindings(model, parent_attributes, purpose)
+      ensure_redeemed_bindings_available!(redeemed, surface, after_ended_ceremonies)
+      switch_source_binding!(redeemed, after_ended_ceremonies, switch_source_auth_session)
+      create_binding!(
+        model:, parent_attributes:, transaction:, surface:, purpose:, base_browser_nonce:, base_browser_digest:,
+        base_token:, resolved_intent:, now:, redeemed:, after_ended_ceremonies:,
+      )
+    rescue ActiveRecord::RecordNotUnique
+      retry
+    end
+
+    def find_active_binding(model, parent_attributes, purpose)
+      model.lock.find_by(
         parent_attributes.merge(purpose: purpose, status_id: AuthAdmissionBinding::ACTIVE_STATUS_IDS),
       )
-      if existing
-        unless existing.entry_intent == resolved_intent
-          raise Denied.new("live admission opens another flow", code: "invalid_admission")
-        end
+    end
 
-        ensure_binding_token_matches!(existing, base_token)
-        ensure_binding_browser_proof_matches!(
-          existing, surface:, nonce: base_browser_nonce, digest: base_browser_digest,
-        )
-        return existing unless existing.expired?(now: now)
-
-        raise Denied.new("admission expired; explicit restart is required", code: "expired_admission")
+    def reuse_active_binding!(existing, resolved_intent, base_token, surface, base_browser_nonce,
+                              base_browser_digest, now)
+      unless existing.entry_intent == resolved_intent
+        raise Denied.new("live admission opens another flow", code: "invalid_admission")
       end
 
-      redeemed = model.where(parent_attributes.merge(purpose: purpose))
+      ensure_binding_token_matches!(existing, base_token)
+      ensure_binding_browser_proof_matches!(
+        existing, surface:, nonce: base_browser_nonce, digest: base_browser_digest,
+      )
+      return existing unless existing.expired?(now: now)
+
+      raise Denied.new("admission expired; explicit restart is required", code: "expired_admission")
+    end
+
+    def find_redeemed_bindings(model, parent_attributes, purpose)
+      model.where(parent_attributes.merge(purpose: purpose))
         .where(status_id: [AuthAdmissionBinding::REDEEMED_STATUS_ID, AuthAdmissionBinding::SWITCHED_STATUS_ID]).to_a
-      if redeemed.any? && !(after_ended_ceremonies && redeemed_ceremonies_all_cancelled?(redeemed, surface:))
-        raise Denied.new("admission redeemed; explicit cancel-and-start is required", code: "invalid_admission")
-      end
+    end
 
+    def ensure_redeemed_bindings_available!(redeemed, surface, after_ended_ceremonies)
+      return unless redeemed.any? && !(after_ended_ceremonies && redeemed_ceremonies_all_cancelled?(redeemed, surface:))
+
+      raise Denied.new("admission redeemed; explicit cancel-and-start is required", code: "invalid_admission")
+    end
+
+    def switch_source_binding!(redeemed, after_ended_ceremonies, switch_source_auth_session)
       if after_ended_ceremonies
         switch_source =
           redeemed.find do |binding|
@@ -866,9 +892,12 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       elsif switch_source_auth_session
         raise Denied.new("unexpected switch source ceremony", code: "invalid_admission")
       end
+    end
 
+    def create_binding!(model:, parent_attributes:, transaction:, surface:, purpose:, base_browser_nonce:,
+                        base_browser_digest:, base_token:, resolved_intent:, now:, redeemed:,
+                        after_ended_ceremonies:)
       curfew_at = admission_curfew_at(redeemed:, now:, after_ended_ceremonies:)
-
       entry_ref = SecureRandom.uuid
       expiry = admission_binding_expiry(transaction:, purpose:, curfew_at:, now:)
       digest = base_browser_digest || AuthAdmissionBinding.browser_digest(
@@ -889,8 +918,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       )
       cover_sign_in_path_curfew!(transaction, curfew_at) if purpose == "authentication_handoff"
       binding
-    rescue ActiveRecord::RecordNotUnique
-      retry
     end
 
     def admission_binding_expiry(transaction:, purpose:, curfew_at:, now:)

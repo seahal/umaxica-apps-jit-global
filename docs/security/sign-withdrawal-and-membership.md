@@ -8,8 +8,11 @@
 > imply sign-side authority. Do not use this document to reintroduce sign-side sessions, refresh,
 > preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
-This document describes the current Client/Visitor withdrawal and membership behavior for the sign
-configuration surfaces. It is not the lifecycle contract for Persona or Organization resources. The
+The com Visitor authentication surface and its withdrawal/recovery routes were retired on
+2026-11-07. The remaining app withdrawal contract is described below; passages that name Visitor or
+the former app/com implementation are historical and do not authorize an active com workflow.
+Persisted Visitor records remain outside this route change. This document is not the lifecycle
+contract for Persona or Organization resources. The
 adopted resource lifecycle, once enabled, is documented separately in
 `docs/architecture/persona-organization-authority.md`; the recovery behavior below must not be
 copied to those resources. Until the required authority migration and lifecycle integration are
@@ -21,12 +24,13 @@ window.
 | Surface | Actor      | Self-service withdrawal | Membership handling                                |
 | ------- | ---------- | ----------------------- | -------------------------------------------------- |
 | `app`   | `Client`   | Yes                     | Client-controlled account lifecycle                |
-| `com`   | `Visitor`  | Yes                     | Visitor-controlled account lifecycle               |
+| `com`   | —          | No; authentication routes retired | No active membership workflow                       |
 | `org`   | `Operator` | No                      | Direct-message request handled by another operator |
 
-## App And Com Withdrawal
+## Historical App And Com Withdrawal Behavior
 
-The `app` and `com` surfaces should use the same withdrawal business logic.
+Before com authentication retirement, the `app` and `com` surfaces used the same withdrawal business
+logic. The following section is retained for historical record only.
 
 The implementation uses a DB-backed withdrawal cycle with shared model/controller concerns and
 separate surface models. Controllers remain surface-specific because routes, current actor helpers,

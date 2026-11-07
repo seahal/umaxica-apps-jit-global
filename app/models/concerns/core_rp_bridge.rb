@@ -56,10 +56,10 @@ module CoreRpBridge
   end
 
   def legacy_core_client_id?
-    rp_client_id.in?(%w(core_app core_com core_org))
+    rp_client_id.in?(%w(core_app core_org))
   end
 
   def legacy_core_host?
-    host.in?(%w(www-jp.umaxica.app www-jp.umaxica.com www-jp.umaxica.org))
+    host.in?(%w(www-jp.umaxica.app www-jp.umaxica.org))
   end
 end

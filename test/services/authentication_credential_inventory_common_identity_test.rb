@@ -37,8 +37,10 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
 
   test "APP retained credentials are available before but not at or after writer expiry" do
     %i(passkey email telephone).each_with_index do |kind, kind_index|
-      actor, model = [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_108_000_000_000 + kind_index),
-                      Client,]
+      actor, model = [
+        Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_108_000_000_000 + kind_index),
+        Client,
+      ]
       deadline = model.database_now
       attributes = { created_at: deadline - 1.minute, discard_at: deadline, purge_eligible_at: deadline + 1.hour }
       case kind

@@ -93,7 +93,8 @@ class PreferenceTokenModelTest < ActiveSupport::TestCase
           assert_nil PreferenceToken.encode(
             @preferences.merge("legacy_cookie" => "dark"), host: @host,
                                                            preference_type: "AppPreference", public_id: @public_id,
-                                                           jti: @jti, jwt_issuer_id: "preference_app", issued_at: @issued_at,
+                                                           jti: @jti, jwt_issuer_id: "preference_app",
+                                                           issued_at: @issued_at,
           )
           assert_nil PreferenceToken.encode(
             @preferences.merge("theme" => "sepia"), host: @host,

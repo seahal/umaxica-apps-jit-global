@@ -15,7 +15,7 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
     assert_equal ids.size, clients.map { |client| client.redirect_uris.sort }.uniq.size
     clients.each do |client|
       assert_predicate client, :private_key_jwt_client?
-      assert_includes %w(client visitor operator), client.resource_type
+      assert_includes %w(client operator), client.resource_type
       assert_predicate client.redirect_uris, :present?
     end
 

@@ -11,6 +11,27 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
   BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
   BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL")
 
+  test "org support has no com enforcement routes" do
+    removed_routes = [
+      ["/support/com/enforcement_cases", :get],
+      ["/support/com/enforcement_cases/new", :get],
+      ["/support/com/enforcement_cases", :post],
+      ["/support/com/enforcement_cases/1", :get],
+      ["/support/com/enforcement_cases/1/approval/new", :get],
+      ["/support/com/enforcement_cases/1/approval", :post],
+      ["/support/com/enforcement_cases/1/release/new", :get],
+      ["/support/com/enforcement_cases/1/release", :post],
+      ["/support/com/enforcement_cases/1/appeal_review/new", :get],
+      ["/support/com/enforcement_cases/1/appeal_review", :post],
+    ]
+
+    removed_routes.each do |path, method|
+      assert_raises(ActionController::RoutingError, "#{method.upcase} #{path} must be unroutable") do
+        Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}#{path}", method: method)
+      end
+    end
+  end
+
   # Every path on these hosts resolves inside the host's own module. Health and revision used to
   # resolve to Base::App instead, which left the hosts unable to name themselves in a health
   # response and left Base::Net and Base::Dev controllers on disk that no route reached.

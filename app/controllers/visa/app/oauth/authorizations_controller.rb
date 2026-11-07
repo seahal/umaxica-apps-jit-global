@@ -33,7 +33,7 @@ module Visa
           render_unsupported_prompt!(e)
         rescue OidcAuthorizeRequestResolver::RequestError => e
           redirect_authorization_request_error!(e)
-        rescue VisaSensitiveAdmissionDispatcher::InvalidRequest
+        rescue VisaSensitiveAdmissionDispatcher::InvalidRequest, BaseAuthAdmissionCoordinator::Denied
           render json: { error: "invalid_request", error_description: "invalid authorization request" },
                  status: :bad_request
         # OidcAuthorizeRequestResolver raises ArgumentError with spec-level request
@@ -42,24 +42,10 @@ module Visa
         # error_description and they disclose nothing about stored data.
         rescue ArgumentError, OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri => e
           render json: { error: "invalid_request", error_description: e.message }, status: :bad_request
+        rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
+          render_authorization_backend_failure!(e)
         # RecordNotFound is different: its message names the model and the primary key that
         # was looked up. The client gets a fixed description; the detail goes to the log.
-        rescue BaseAuthAdmissionCoordinator::Denied
-          render json: { error: "invalid_request", error_description: "invalid authorization request" },
-                 status: :bad_request
-        rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
-          Rails.logger.error(
-            JitLogEvent.format(
-              "oidc.authorize.backend_failure",
-              surface: oidc_result_surface,
-              error_class: e.class.name,
-              request_id: request.request_id,
-            ),
-          )
-          render json: {
-            error: "temporarily_unavailable",
-            error_description: I18n.t("errors.rate_limit.backend_unavailable"),
-          }, status: :service_unavailable
         rescue ActiveRecord::RecordNotFound => e
           Rails.logger.info(
             JitLogEvent.format(
@@ -70,6 +56,23 @@ module Visa
           )
           render json: { error: "invalid_request", error_description: "invalid authorization request" },
                  status: :bad_request
+        end
+
+        private
+
+        def render_authorization_backend_failure!(error)
+          Rails.logger.error(
+            JitLogEvent.format(
+              "oidc.authorize.backend_failure",
+              surface: oidc_result_surface,
+              error_class: error.class.name,
+              request_id: request.request_id,
+            ),
+          )
+          render json: {
+            error: "temporarily_unavailable",
+            error_description: I18n.t("errors.rate_limit.backend_unavailable"),
+          }, status: :service_unavailable
         end
       end
     end

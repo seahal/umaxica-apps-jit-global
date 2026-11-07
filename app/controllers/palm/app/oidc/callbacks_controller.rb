@@ -14,6 +14,10 @@ module Palm
 
         private
 
+        def oidc_rp_default_landing_path
+          palm_app_dashboard_path(ri: params[:ri])
+        end
+
         def oidc_client_id
           RpDeploymentBindingValue.client_id("palm-app")
         end

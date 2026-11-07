@@ -62,14 +62,21 @@ export default function SelectorShow({
   };
 
   return (
-    <Page title={title} description={description} width="narrow">
+    <Page
+      title={title}
+      description={description}
+      width="narrow"
+    >
       <ErrorList errors={error === null ? [] : [error]} />
 
       <Card>
         {candidates.length === 0 ? (
           <p className="text-base text-fg-muted">{emptyMessage}</p>
         ) : (
-          <form onSubmit={submit} className="flex flex-col gap-4">
+          <form
+            onSubmit={submit}
+            className="flex flex-col gap-4"
+          >
             <fieldset className="flex flex-col gap-3">
               <legend className="text-base font-medium text-fg">{description}</legend>
               {candidates.map((candidate) => {
@@ -102,7 +109,10 @@ export default function SelectorShow({
                 );
               })}
             </fieldset>
-            <Button type="submit" isDisabled={processing || selected.length === 0}>
+            <Button
+              type="submit"
+              isDisabled={processing || selected.length === 0}
+            >
               {submitLabel}
             </Button>
           </form>

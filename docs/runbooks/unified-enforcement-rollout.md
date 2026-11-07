@@ -7,11 +7,18 @@ steps.
 
 ## Current status
 
-Phases 0 through 10 are implemented, tested, and merged to `develop`. Phase 11 (parity, rollout,
-documentation) is partially done:
+As of 2026-11-07, the live enforcement entrypoints cover `app` and `org`. The `org` Support routes
+for `com` Cases have been removed, and the runtime identifier digest accepts only `app` and `org`.
+Public anonymous `com` Preference, Chronicle, content and Publishing surfaces remain. No `com`
+enforcement data or database was deleted by this change. The accepted `adr/unified-enforcement.md`
+still specifies `app`/`com`/`org`; its intended supersession or amendment requires an owner decision.
+Until then, follow this runbook only for the live `app` and `org` enforcement paths, and do not
+provision the retired `com` enforcement key.
 
-- Signup gating (email + telephone, `app` and `com`) is wired and tested.
-- Identifier attachment gating (email + telephone, `app`/`com`/`org`) is wired and tested.
+The enforcement implementation and rollout work is otherwise partially complete:
+
+- Signup gating (email + telephone, `app`) is wired and tested.
+- Identifier attachment gating (email + telephone, `app` and `org`) is wired and tested.
 - The org console (Phase 9: create/approve/release, realm-scoped) is wired and tested.
 - Recovery flow gating has no wiring target: this repository has no account-recovery or reactivation
   controller today. `EnforcementIdentifierGate#enforcement_blocks_email_recovery?` and
@@ -22,10 +29,9 @@ documentation) is partially done:
 
 ## Secret provisioning order
 
-Three secrets gate all live enforcement paths:
+Two secrets gate the live enforcement paths:
 
 - `ENFORCEMENT_APP_IDENTIFIER_HMAC_KEY`
-- `ENFORCEMENT_COM_IDENTIFIER_HMAC_KEY`
 - `ENFORCEMENT_ORG_IDENTIFIER_HMAC_KEY`
 
 Each is read by `EnforcementIdentifierDigest.key_for(realm)`
@@ -35,10 +41,10 @@ then ENV) and raises `KeyError` — by design, per
 fail-closed: an unprovisioned key does not silently disable enforcement, it 500s the request path
 that needed it.
 
-**Provisioning must happen before any Phase 11 code that reads these keys reaches an environment**,
-for every environment in turn (never all at once, and never after deploying the code):
+**Provisioning must happen before code that reads these keys reaches an environment**, for every
+environment in turn (never all at once, and never after deploying the code):
 
-1. Generate three independent, high-entropy secrets (do not reuse `EMAIL_ADDRESS_HMAC_SALT` /
+1. Generate two independent, high-entropy secrets (do not reuse `EMAIL_ADDRESS_HMAC_SALT` /
    `TELEPHONE_NUMBER_HMAC_SALT`, or any secret across realms — D6 requires per-realm, dedicated keys
    so a compromised login-lookup key cannot double as an offline oracle over the enforcement list,
    and vice versa).
@@ -47,14 +53,13 @@ for every environment in turn (never all at once, and never after deploying the 
    `compose.yaml`'s `environment:` block, already updated with development-only defaults; production
    has its own separate mechanism outside this repository's checked-in files).
 3. Restart/redeploy so every app process picks up the new value. Confirm with a Rails console in
-   that environment: `EnforcementIdentifierDigest.key_for("app")` (repeat per realm) must return a
-   non-nil string, not raise.
-4. Only after all three keys are confirmed present in an environment, deploy application code that
+   that environment: `EnforcementIdentifierDigest.key_for("app")` and
+   `EnforcementIdentifierDigest.key_for("org")` must return non-nil strings, not raise.
+4. Only after both keys are confirmed present in an environment, deploy application code that
    calls `EnforcementIdentifierDigest`/`EnforcementIdentifierGate` to that environment.
 
-Deploying the gating code before the keys exist in that environment reproduces the exact failure
-already caught once during Phase 6/11 development: every signup, attachment, and future recovery
-request that reaches the gate raises `KeyError` and 500s.
+Deploying the gating code before the keys exist in that environment causes each signup, attachment,
+and future recovery request that reaches the gate to raise `KeyError` and return a server error.
 
 ## Migration order
 
@@ -76,8 +81,8 @@ independent of trigger presence, so this is a defense-in-depth ordering note, no
 
 Run after secret provisioning and migration, before considering that environment live:
 
-1. `EnforcementIdentifierDigest.key_for(realm)` returns non-nil for `app`, `com`, `org`.
-2. `bin/rails db:migrate:status` shows zero pending migrations across all 19 database roles.
+1. `EnforcementIdentifierDigest.key_for(realm)` returns non-nil for `app` and `org`.
+2. `bin/rails db:migrate:status` shows zero pending migrations across all configured database roles.
 3. Full regression suite green in that environment's CI, including
    `test/controllers/base/org/support/enforcement_cases_controller_test.rb` (org console),
    `test/integration/enforcement_identifier_attachment_gate_test.rb` (attachment gating),
@@ -102,7 +107,7 @@ Run after secret provisioning and migration, before considering that environment
   (`adr/operator-capability-authorization.md`, 2026-09-26): `EnforcementCasePolicy` checks the
   realm's read, apply, approve, release, and review_appeal capabilities; the org realm has none.
 - 14 of the ~16 planned per-table triggers remain unbuilt (Phase 8 note in the plan's Progress Log):
-  `*_telephones`, `*_passkeys`, `*_secret_credentials` across all three realms,
+  `*_telephones`, `*_passkeys`, `*_secret_credentials` across the live `app` and `org` realms,
   `client_totp_credentials`, `operator_entra_identities`, and hard-delete protection on `visitors`
   and `operators`. Each follows the exact pattern already proven on `client_emails` and `clients`
   (use `clock_timestamp()`, never `now()`, in any time-predicate trigger; test raw-SQL failure paths

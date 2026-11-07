@@ -19,7 +19,16 @@ class AppRegisteredContactDestinationGuard
 
     def with_available_destination(contact:, owner:)
       with_lock(contact: contact, owner: owner) do |registered|
-        raise RegisteredDestinationIncident, "APP contact destination is already registered" if registered
+        if registered
+          Rails.logger.warn(
+            JitLogEvent.format(
+              "auth.registered_contact_destination.refused",
+              channel: contact.is_a?(ClientEmail) ? "email" : "telephone",
+              owner_type: owner.class.name,
+            ),
+          )
+          raise RegisteredDestinationIncident, "APP contact destination is already registered"
+        end
 
         yield
       end

@@ -74,7 +74,7 @@ read-only screen checks proof without taking a row lock, while mutations recheck
 lock | The screen returns grantable capabilities only after proof succeeds; mutations re-evaluate
 capability, tenant and target resource | Refuse without disclosing grant options or changing a
 grant | | org | Operator / support resource | Read the session-revocation screen or revoke
-Client/visitor sessions | `Base::Org::Support::*`, `support_session_revoke` | Existing support
+Client sessions | `Base::Org::Support::Clients::*`, `support_session_revoke` | Existing support
 authorization plus Step-Up; the read-only screen checks proof without taking a row lock, while the
 mutation rechecks under the owner lock | The screen returns the active-session count only after
 proof succeeds; the mutation rechecks target actor, tenant and sessions | Refuse without disclosing

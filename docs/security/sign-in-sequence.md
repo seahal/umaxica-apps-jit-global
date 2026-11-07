@@ -147,7 +147,7 @@ The supported credential methods remain surface-aware:
 | Surface | sign/id ceremony methods                                            | acme-owned commit                                            |
 | ------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `app`   | email OTP, passkey, TOTP where implemented, passcode, Google, Apple | Client session, account/session state, OIDC/token issuance   |
-| `com`   | email OTP, passkey, passcode                                        | Visitor session, account/session state, OIDC/token issuance  |
+| `com`   | no sign-in; public pages are anonymous                              | no authenticated session, actor, or token                    |
 | `org`   | passkey, passcode                                                   | Operator session, account/session state, OIDC/token issuance |
 
 Org production sign-in does not use external social providers. Google, Apple, Microsoft, and other
@@ -186,7 +186,7 @@ intended behavior, not a defect. When the earlier tab was a Sign Up, its registr
 and only its sign-in handoff is refused — at the OP, because the browser already holds a Root
 Session, or at the RP; the person signs in with the new account later. The rule is per browser:
 different browsers have separate cookies and are independent; only the account's session limit
-applies (`ClientToken::MAX_SESSIONS_PER_USER` 2, `VisitorToken` 1, `OperatorToken` 1).
+applies (`ClientToken::MAX_SESSIONS_PER_USER` 2, `OperatorToken` 1).
 
 ## Timing And Enumeration Mitigation
 
@@ -237,7 +237,7 @@ access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 
 ## Local sign-in phase admission
 
-Local app and com sign-in requests that use a DB-backed `SignInFlow` carry a server-generated,
+Local app sign-in requests that use a DB-backed `SignInFlow` carry a server-generated,
 purpose-bound signed binding for the expected surface, flow public identifier, phase, and immutable
 flow generation. This binding is an admission check; it is not a replacement for the locked flow
 row, actor binding, expiry, provider correlation, or the existing session-issuance boundary.

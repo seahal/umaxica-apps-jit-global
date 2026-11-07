@@ -47,8 +47,11 @@ work; this paragraph does not claim those checks passed.
 | APP | `Auth::App::Sign::Up::Check::Email::OtpsController` | `Auth::App::Sign::Up::Check::Telephone::OtpsController` | `Auth::App::Sign::In::EmailsController` | `Auth::App::Verification::EmailsController` |
 | COM | `Auth::Com::Sign::Up::Check::Email::OtpsController` | `Auth::Com::Sign::Up::Check::Telephone::OtpsController` | `Auth::Com::Sign::In::EmailsController` | `Auth::Com::Verification::EmailsController` |
 
-These are eight surface/purpose/channel families. Telephone is Sign-Up contact confirmation only.
-The new target covers the two Email Sign-In families; preserve existing Sign-Up/Step-Up models.
+This table records the historical supplied snapshot only. Auth com authentication was retired on
+2026-11-07; current Auth authentication routes are app/org only, and Email OTP issuance is app-only.
+Telephone is Sign-Up contact confirmation only in the historical inventory. The new target covered
+the two Email Sign-In families; preserve existing Sign-Up/Step-Up models where their current routes
+remain active.
 
 ## Historical Auth/Base boundary observations
 

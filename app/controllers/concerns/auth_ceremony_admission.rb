@@ -126,7 +126,16 @@ module AuthCeremonyAdmission
           sid
         end
       end
-    write_auth_ceremony_sid_cookie!(replacement_sid) if replacement_sid
+    if replacement_sid
+      write_auth_ceremony_sid_cookie!(replacement_sid)
+      # A newly admitted sign path starts at its first page. A sign-in flow locator left by an
+      # earlier attempt in this browser would otherwise be resumed by the clean first-page request,
+      # which carries no flow binding, and be refused as a stale page with no way back.
+      unless BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+        locator = SignInCycleLocator.new(session, surface: auth_ceremony_surface)
+        locator.clear! if locator.stored?
+      end
+    end
     redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
          AuthCeremonySession::InvalidTransition => e

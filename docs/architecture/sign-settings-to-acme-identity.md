@@ -100,7 +100,7 @@ Tests should prove both sides of the ownership boundary:
 - App Google and Apple settings remain Auth settings because they are credential/provider
   ceremony-backed settings. Org Entra settings should mirror that pattern without changing the
   existing org Entra sign-in ceremony route.
-- `com` keeps only Auth passkey settings.
+- `com` has no Auth settings or authentication routes; its Auth host is retired.
 - `app` keeps only Auth passkey, TOTP, Google, and Apple settings.
 - `org` keeps only Auth passkey and Entra settings.
 - `mfa/reset` and `mfa/challenge` are not general Auth settings exceptions. If a retained

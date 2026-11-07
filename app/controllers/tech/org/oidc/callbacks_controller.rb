@@ -14,6 +14,10 @@ module Tech
 
         private
 
+        def oidc_rp_default_landing_path
+          "/"
+        end
+
         def oidc_client_id
           "tech-org-ww"
         end

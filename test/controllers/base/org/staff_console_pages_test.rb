@@ -137,8 +137,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
 
   test "support console opens with support.console.read and lists only granted areas" do
     [OperatorCapabilityGrant::SUPPORT_CONSOLE_READ,
-     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
-     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_COM,].each do |capability|
+     OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @operator,
         origin: "bootstrap",

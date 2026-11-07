@@ -10,8 +10,6 @@ module Jit
     def setup
       @original_env = {
         "PRIVATE_AUTH_SERVICE_URL" => ENV["PRIVATE_AUTH_SERVICE_URL"],
-        "PRIVATE_AUTH_CORPORATE_URL" => ENV["PRIVATE_AUTH_CORPORATE_URL"],
-        "AUTH_CORPORATE_URL" => ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"),
         "PRIVATE_AUTH_STAFF_URL" => ENV["PRIVATE_AUTH_STAFF_URL"],
       }
     end
@@ -30,12 +28,6 @@ module Jit
       assert_equal "http://id.app.localhost", JitIdHostEnv.service_url
     end
 
-    test "corporate_url returns AUTH_CORPORATE_URL" do
-      ENV["PRIVATE_AUTH_CORPORATE_URL"] = "http://id.com.localhost"
-
-      assert_equal "http://id.com.localhost", JitIdHostEnv.corporate_url
-    end
-
     test "staff_url returns PRIVATE_AUTH_STAFF_URL" do
       ENV["PRIVATE_AUTH_STAFF_URL"] = "http://id.org.localhost"
 
@@ -44,7 +36,6 @@ module Jit
 
     test "validate! raises error when env is missing" do
       ENV["PRIVATE_AUTH_SERVICE_URL"] = nil
-      ENV["PRIVATE_AUTH_CORPORATE_URL"] = "present"
       ENV["PRIVATE_AUTH_STAFF_URL"] = "present"
 
       error =
@@ -56,7 +47,6 @@ module Jit
 
     test "validate! does not raise error when all env are present" do
       ENV["PRIVATE_AUTH_SERVICE_URL"] = "present"
-      ENV["PRIVATE_AUTH_CORPORATE_URL"] = "present"
       ENV["PRIVATE_AUTH_STAFF_URL"] = "present"
 
       assert_nothing_raised do

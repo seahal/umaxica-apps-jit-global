@@ -8,7 +8,7 @@ stateDiagram-v2
     Issued --> Unavailable: OTP deadline or parent terminal / refusal predicate
     Verified --> Unavailable: result deadline, release or lost live authority / refusal predicate
     note right of Issued
-        APP/COM use independently implemented Email and Telephone operations.
+        APP uses independently implemented Email and Telephone operations.
         Session binding derives from the original flow reference and nonce digest.
         Admission requires the initiating browser's raw nonce, not the public flow ID.
         Nonce admission is repeated after the owning Ticket row lock refreshes its facts.

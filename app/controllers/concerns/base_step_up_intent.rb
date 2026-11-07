@@ -42,25 +42,31 @@ module BaseStepUpIntent
     )
     issuance
   rescue BaseAuthAdmissionCoordinator::Denied => e
-    log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_bootstrap_issue")
-    if e.code == "transaction_conflict"
-      session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = previous_browser_nonce if
-        previous_browser_nonce.present?
-      render_step_up_conflict!(
-        actor: actor, token: token, requirement: requirement, return_to: return_to,
-        transaction_ref: e.context.fetch("transaction_ref"),
-      )
-      return nil
-    end
-    if e.code == "bootstrap_not_fresh"
-      render plain: I18n.t("auth.step_up.fresh_sign_in_required"), status: :forbidden
-    else
-      render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
-    end
+    render_bootstrap_admission_denial!(
+      e, actor:, token:, requirement:, return_to:, previous_browser_nonce:,
+    )
     nil
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
     nil
+  end
+
+  def render_bootstrap_admission_denial!(error, actor:, token:, requirement:, return_to:, previous_browser_nonce:)
+    log_step_up_refusal(error, session_public_id: token.public_id, stage: "base_bootstrap_issue")
+    if error.code == "transaction_conflict"
+      session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = previous_browser_nonce if
+        previous_browser_nonce.present?
+      render_step_up_conflict!(
+        actor: actor, token: token, requirement: requirement, return_to: return_to,
+        transaction_ref: error.context.fetch("transaction_ref"),
+      )
+      return
+    end
+    if error.code == "bootstrap_not_fresh"
+      render plain: I18n.t("auth.step_up.fresh_sign_in_required"), status: :forbidden
+    else
+      render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    end
   end
 
   def render_step_up_conflict!(actor:, token:, requirement:, return_to:, transaction_ref:)

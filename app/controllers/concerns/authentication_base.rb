@@ -3053,7 +3053,8 @@ module AuthenticationBase
     raise LoginCooldownError if latest_at + cooldown > token_class.database_now
   end
 
-  # A cooldown refusal is not a dead end: it says where a new sign-in starts.
+  # A cooldown refusal tells the person to wait and sign in again from the service they were
+  # using; it names no URL, because a sign-in can start from any relying party, not only Base.
   # It must not disclose that the account exists or when it last signed in, so
   # the message is generic and Retry-After is always the full window, never
   # the time remaining since the previous login. The used callback or ceremony
@@ -3061,7 +3062,7 @@ module AuthenticationBase
   def render_login_cooldown
     response.set_header("Retry-After", AuthenticationBase.login_cooldown.to_i.to_s)
     response.set_header("Cache-Control", "no-store")
-    message = I18n.t("errors.messages.login_cooldown_retry", restart_url: login_cooldown_restart_url)
+    message = I18n.t("errors.messages.login_cooldown_retry")
     render plain: message, status: :too_many_requests
   end
 
@@ -3389,8 +3390,6 @@ module AuthenticationBase
       sign_app_sign_in_challenge_path(**attrs)
     elsif respond_to?(:sign_org_sign_in_challenge_path, true)
       sign_org_sign_in_challenge_path(**attrs)
-    elsif respond_to?(:auth_com_sign_in_challenge_path, true)
-      auth_com_sign_in_challenge_path(**attrs)
     else
       query = attrs.compact.to_query
       query.present? ? "/sign/in/challenge?#{query}" : "/sign/in/challenge"
@@ -3457,9 +3456,7 @@ module AuthenticationBase
   def withdrawal_required_session_entry_path
     ri = params[AuthIoKeys::Params::RI]
     return new_base_app_identity_withdrawal_session_path(ri: ri) if controller_path.start_with?("base/app/")
-    return new_base_com_identity_withdrawal_session_path(ri: ri) if controller_path.start_with?("base/com/")
     return new_base_app_identity_withdrawal_session_path(ri: ri) if controller_path.start_with?("auth/app/")
-    return new_base_com_identity_withdrawal_session_path(ri: ri) if controller_path.start_with?("auth/com/")
 
     new_base_app_identity_withdrawal_session_path(ri: ri)
   end

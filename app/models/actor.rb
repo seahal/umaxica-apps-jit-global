@@ -50,7 +50,7 @@ class Actor < ActiveSupport::CurrentAttributes
     # Role predicates delegate to the installed context. They are role
     # predicates, not authorization gates: protected behavior must still go
     # through ActionPolicy / policy enforcement.
-    delegate :client?, :operator?, :visitor?, :unauthenticated?, :authenticated?, to: :context
+    delegate :client?, :operator?, :unauthenticated?, :authenticated?, to: :context
 
     # Transport/channel predicates. browser?/native? read channel; cookie?/
     # bearer? read transport. The two axes are not conflated.
@@ -204,10 +204,6 @@ class Actor < ActiveSupport::CurrentAttributes
 
     def operator
       actor if operator?
-    end
-
-    def visitor
-      actor if visitor?
     end
 
     private

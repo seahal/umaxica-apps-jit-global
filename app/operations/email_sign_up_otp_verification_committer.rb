@@ -45,14 +45,24 @@ class EmailSignUpOtpVerificationCommitter
           reset_consumed_attempts(flow, email, owner, transaction_model, pending_status, code, reset_snapshot)
         end
 
-      if email.is_a?(ClientEmail) && email.user_id == owner.id
-        AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: owner, &verify)
+      if app_owned_email?(email, owner)
+        verify_with_available_destination(email, owner, &verify)
       else
         verify.call
       end
     end
 
     private
+
+    def app_owned_email?(email, owner)
+      email.is_a?(ClientEmail) && email.user_id == owner.id
+    end
+
+    def verify_with_available_destination(email, owner)
+      AppRegisteredContactDestinationGuard.with_available_destination(contact: email, owner: owner) { yield }
+    rescue AppRegisteredContactDestinationGuard::RegisteredDestinationIncident
+      result(:invalid_code, email)
+    end
 
     def components(flow, email)
       case flow

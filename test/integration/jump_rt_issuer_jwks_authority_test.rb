@@ -6,10 +6,8 @@ require "test_helper"
 class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  # two.md WU-3 removes every corporate credential/protocol host. The canonical Jump RT
-  # namespaces stay registered (their removal is outside WU-3), but only the app and org hosts
-  # still publish a JWKS route; the corporate namespaces are verified against the same registry
-  # keyset in process.
+  # Retired corporate authentication surfaces have no Jump issuer capability. Every remaining
+  # app/org Jump issuer must publish the same key used by its signing namespace.
   test "canonical Jump issuers sign RT and the routing surfaces publish the exact signing key" do
     # Other tests intentionally reload the process-global registry with fixture keys. Rebuild it
     # from the restored process environment so this cross-host contract is order-independent.
@@ -17,19 +15,14 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
 
     issuers = {
       "AUTH_APP" => "https://auth.umaxica.app",
-      "AUTH_COM" => "https://auth.umaxica.com",
       "AUTH_ORG" => "https://auth.umaxica.org",
       "BASE_APP" => "https://www.umaxica.app",
-      "BASE_COM" => "https://www.umaxica.com",
       "BASE_ORG" => "https://www.umaxica.org",
       "VISA_APP" => "https://visa.umaxica.app",
-      "VISA_COM" => "https://visa.umaxica.com",
       "VISA_ORG" => "https://visa.umaxica.org",
       "CORE_APP" => "https://jp.umaxica.app",
-      "CORE_COM" => "https://jp.umaxica.com",
       "CORE_ORG" => "https://jp.umaxica.org",
       "WARP_APP" => "https://www-jp.umaxica.app",
-      "WARP_COM" => "https://www-jp.umaxica.com",
       "WARP_ORG" => "https://www-jp.umaxica.org",
       "PALM_APP" => "https://palm-jp.umaxica.app",
     }
@@ -45,18 +38,12 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       assert_equal origin, claims.fetch("iss"), namespace
       assert_equal "ES384", header.fetch("alg"), namespace
       assert_equal "reuse", claims.fetch("rpl"), namespace
-      published =
-        if namespace.end_with?("_COM")
-          # Same wire shape as the HTTP route: the registry hash uses symbol keys.
-          JSON.parse(JSON.generate(JitSecurityJwtRegistry.jwks_for("surface:#{namespace}")))
-        else
-          host!(URI.parse(origin).host)
-          https!
-          get("/.well-known/jwks.json")
+      host!(URI.parse(origin).host)
+      https!
+      get("/.well-known/jwks.json")
 
-          assert_response :ok
-          response.parsed_body
-        end
+      assert_response :ok
+      published = response.parsed_body
       keys = published.fetch("keys")
 
       assert_includes 1..JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_KEYS, keys.size, namespace
@@ -83,7 +70,7 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       assert_equal claims, verified, namespace
     end
 
-    %w(APP COM ORG).each do |realm|
+    %w(APP ORG).each do |realm|
       base_keys = published_keys.fetch("BASE_#{realm}")
       visa_keys = published_keys.fetch("VISA_#{realm}")
       base_public_material = base_keys.map { |key| key.slice("kty", "crv", "x", "y") }

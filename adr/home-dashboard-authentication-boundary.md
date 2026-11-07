@@ -53,6 +53,23 @@ resolution. The table below describes the final response after canonicalization;
 Dashboard authentication boundary remains intact. Warp retains its Regional context behavior. See
 `specs/global-region-canonicalization/spec.md` and `docs/architecture/preference.md`.
 
+## Amendment: RP Home and post-sign-in landing (2026-11-07)
+
+By the owner's decision, Base app/org, Palm app, and Warp app/org keep an anonymous Home available
+and answer an authenticated request to `/` with 403, no redirect, and `Cache-Control: private,
+no-store`. Invalid or expired RP sessions are treated as signed out. After a successful OIDC callback,
+those RPs use their own `/dashboard` when the validated `target_link_uri` is absent or invalid. A
+validated target continues to take precedence. Base retains its existing selector flow after landing
+on `/dashboard`.
+
+Core app/org are the explicit exception: their roots continue to render for signed-in and signed-out
+visitors, and a callback without a validated target lands on `/`. Core has no Rails dashboard; its
+screens are shared with the TanStack Start frontend, so the root remains its entry point.
+
+The signed-out Dashboard behavior remains a documented residual: Base and Palm redirect to their
+own `/sign` entry with the Dashboard path as the target, while Warp returns 404. This amendment does
+not change that difference, `/sign`, or CSRF configuration.
+
 ## Decision
 
 ### Persona selection and switching (2026-11-06)
@@ -63,26 +80,30 @@ selected session cannot write another selector choice; later changes go through 
 The selector remains outside the sign-in state machine for now; connecting it is tracked in
 `plans/backlog/2026-11-06-selector-state-machine-connection.md`.
 
-Base and Warp apply the same contract on their app, com, and org hosts:
+The active Home and Dashboard contracts are:
 
-| Session       | `GET /`  | `GET /dashboard` |
-| ------------- | -------- | ---------------- |
-| Anonymous     | 200 Home | 404              |
-| Authenticated | 404      | 200 Dashboard    |
+| Surface      | Session       | `GET /`              | `GET /dashboard`                                  |
+| ------------ | ------------- | -------------------- | ------------------------------------------------- |
+| Base app/org | Anonymous     | 200 Home             | Redirect to `/sign` with the Dashboard as target  |
+| Base app/org | Authenticated | 403, no redirect     | 200 Dashboard or selector flow                   |
+| Palm app     | Anonymous     | 200 Home             | Redirect to `/sign` with the Dashboard as target  |
+| Palm app     | Authenticated | 403, no redirect     | 200 Dashboard                                     |
+| Warp app/org | Anonymous     | 200 Home             | 404                                               |
+| Warp app/org | Authenticated | 403, no redirect     | 200 Dashboard                                     |
+| Core app/org | Either        | 200 shared Home      | No Rails Dashboard route                         |
 
-No automatic redirect is performed between `/` and `/dashboard`, or from either page to sign-in. The
-routes remain registered. A rejected request is expected control flow, not a failure: the action
-renders the ordinary 404 representation itself through `SessionBoundaryNotFound` (the static public
-404 page, or the `ActionDispatch::PublicExceptions` JSON document) instead of raising. The boundary
-therefore never passes through the exceptions app, and `consider_all_requests_local` or
-`show_exceptions` cannot change its outcome. Dashboard actions retain their surface authorization
-checks. Both pages use the validated session state supplied by `logged_in?`.
+Base com routes were removed; no Base com Home or Dashboard contract remains. No redirect connects
+Home with Dashboard. The signed-out Dashboard difference is retained: Base and Palm redirect to
+their own `/sign` entry with the Dashboard path as target, while Warp returns 404. A refused signed-in
+Home request on Base, Palm, or Warp is expected control flow and returns 403 with
+`Cache-Control: private, no-store`; invalid or expired RP credentials follow the signed-out row.
+Dashboard actions retain their surface authorization checks.
 
-The Home and Dashboard responses are private and not stored by shared caches. Public HTML 404
-responses also carry `Cache-Control: private, no-store`, preventing an authenticated Home miss from
-poisoning anonymous Home.
+Responses whose outcome depends on RP authentication state are not stored by shared caches. Public
+HTML 404 responses also carry `Cache-Control: private, no-store`.
 
-Successful direct sign-in returns to the surface's `/dashboard`, never through `/`. A protocol
+Successful direct sign-in returns to the surface's `/dashboard`, never through `/`, on Base and
+Warp app/org and Palm app. Core app/org retain their explicit `/` exception above. A protocol
 continuation already in progress (OIDC authorization resume, a verified signed `pt`) keeps its own
 destination. Every controller that completes a sign-in, including Base controllers such as the app
 social completion, resolves its surface explicitly; a controller without a sign-in surface fails
@@ -91,8 +112,8 @@ Switcher, Settings, and related return links target `/dashboard`.
 
 ## Consequences
 
-Bookmarks and browser history that revisit a page outside its session state receive 404. The
-ordinary error representation does not disclose the subject or reason for refusal.
+Bookmarks and browser history follow the surface-specific rows above when the session changes. The
+ordinary refusal representations do not disclose the subject or reason for denial.
 
 ## Regression record (2026-10-02)
 

@@ -14,9 +14,9 @@ Authentication classification must be declared and audited explicitly by concret
 metadata, not inferred from `OpenController`, `PrivateController`, or `GuestController` inheritance.
 Missing declarations resolve to `:deny_all`.
 
-For `sign`, these boundaries are surface-local: `Sign::App::*Controller`, `Sign::Com::*Controller`,
-and `Sign::Org::*Controller` own their own base classes so `app`, `com`, and `org` behavior stays
-separated.
+Active Auth sign boundaries are surface-local: `Auth::App::Sign::*Controller` and
+`Auth::Org::Sign::*Controller` own their own base classes. Auth com sign-in was retired; Base com
+continues only as an anonymous public and Preference surface.
 
 ## Current Boundaries
 

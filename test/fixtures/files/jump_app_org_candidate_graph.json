@@ -1,0 +1,29 @@
+{
+  "nodes": {
+    "auth-app-ww": "https://auth.umaxica.app",
+    "auth-org-ww": "https://auth.umaxica.org",
+    "base-app-ww": "https://www.umaxica.app",
+    "base-org-ww": "https://www.umaxica.org",
+    "core-app-jp": "https://jp.umaxica.app",
+    "core-org-jp": "https://jp.umaxica.org",
+    "warp-app-jp": "https://www-jp.umaxica.app",
+    "warp-org-jp": "https://www-jp.umaxica.org",
+    "palm-app-jp": "https://palm-jp.umaxica.app"
+  },
+  "edges": [
+    ["auth-app-ww", "base-app-ww"],
+    ["auth-org-ww", "base-org-ww"],
+    ["base-app-ww", "auth-app-ww"],
+    ["base-app-ww", "core-app-jp"],
+    ["base-app-ww", "palm-app-jp"],
+    ["base-app-ww", "warp-app-jp"],
+    ["base-org-ww", "auth-org-ww"],
+    ["base-org-ww", "core-org-jp"],
+    ["base-org-ww", "warp-org-jp"],
+    ["core-app-jp", "base-app-ww"],
+    ["core-org-jp", "base-org-ww"],
+    ["palm-app-jp", "base-app-ww"],
+    ["warp-app-jp", "base-app-ww"],
+    ["warp-org-jp", "base-org-ww"]
+  ]
+}

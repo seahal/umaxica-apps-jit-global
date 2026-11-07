@@ -384,7 +384,6 @@ module SocialAuth
     return current_resource if respond_to?(:current_resource, true) && current_resource.present?
     return current_client if respond_to?(:current_client, true) && current_client.present?
     return current_operator if respond_to?(:current_operator, true) && current_operator.present?
-    return current_visitor if respond_to?(:current_visitor, true) && current_visitor.present?
 
     nil
   end

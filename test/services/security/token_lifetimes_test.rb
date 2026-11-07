@@ -23,21 +23,20 @@ module Security
     test "defines per-surface idle timeout windows" do
       assert_equal 8.hours, SecurityTokenLifetimes::CLIENT_IDLE_TTL
       assert_equal 30.minutes, SecurityTokenLifetimes::OPERATOR_IDLE_TTL
-      assert_equal 8.hours, SecurityTokenLifetimes::VISITOR_IDLE_TTL
       assert_equal 60.seconds, SecurityTokenLifetimes::ACTIVITY_TOUCH_THROTTLE
     end
 
     test "defines per-surface refresh token windows" do
       assert_equal 30.days, SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
       assert_equal 8.hours, SecurityTokenLifetimes::OPERATOR_REFRESH_TOKEN_TTL
-      assert_equal 30.days, SecurityTokenLifetimes::VISITOR_REFRESH_TOKEN_TTL
     end
 
-    test "idle_ttl_for maps each surface and falls back to the client window" do
+    test "idle_ttl_for maps supported resource types and refuses retired or unknown values" do
       assert_equal 30.minutes, SecurityTokenLifetimes.idle_ttl_for("operator")
-      assert_equal 8.hours, SecurityTokenLifetimes.idle_ttl_for("visitor")
       assert_equal 8.hours, SecurityTokenLifetimes.idle_ttl_for("client")
-      assert_equal 8.hours, SecurityTokenLifetimes.idle_ttl_for("unknown")
+      [nil, "", "visitor", "unknown"].each do |resource_type|
+        assert_raises(ArgumentError) { SecurityTokenLifetimes.idle_ttl_for(resource_type) }
+      end
     end
 
     test "keeps existing family constants aligned with the application policy" do

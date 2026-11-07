@@ -14,13 +14,12 @@ module Warp
 
         private
 
-        def consume_oidc_pt
-          destination = super
-          (destination == "/") ? warp_app_dashboard_path(ri: params[:ri]) : destination
-        end
-
         def oidc_client_id
           RpDeploymentBindingValue.client_id("warp-app")
+        end
+
+        def oidc_rp_default_landing_path
+          warp_app_dashboard_path(ri: params[:ri])
         end
       end
     end

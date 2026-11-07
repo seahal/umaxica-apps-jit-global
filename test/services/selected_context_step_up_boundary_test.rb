@@ -88,7 +88,9 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
 
       second_params = params.merge(
         state: SecureRandom.urlsafe_base64(32), nonce: SecureRandom.urlsafe_base64(32),
-        code_challenge: Base64.urlsafe_encode64(Digest::SHA256.digest("selected-context-step-up-again"), padding: false),
+        code_challenge: Base64.urlsafe_encode64(
+          Digest::SHA256.digest("selected-context-step-up-again"), padding: false,
+        ),
       )
       second_validated_request = OidcAuthorizeRequestResolver.call(
         params: second_params, resource: actor, resource_type:,

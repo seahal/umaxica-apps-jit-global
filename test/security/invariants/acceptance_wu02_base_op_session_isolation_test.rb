@@ -26,7 +26,9 @@ class AcceptanceWu02BaseOpSessionIsolationTest < ActiveSupport::TestCase
       File.read(path).lines.each_with_index.filter_map do |line, index|
         key =
           auth_session_keys.find do |session_key|
-            line.match?(/\bsession\s*(?:\[\s*:(?:#{Regexp.escape(session_key)})\b|\.dig\s*\(\s*:(?:#{Regexp.escape(session_key)})\b)/)
+            escaped_key = Regexp.escape(session_key)
+            line.match?(/\bsession\s*\[\s*:#{escaped_key}\b/) ||
+              line.match?(/\bsession\s*\.dig\s*\(\s*:#{escaped_key}\b/)
           end
         "#{path}:#{index + 1}: Rails session key :#{key}" if key
       end

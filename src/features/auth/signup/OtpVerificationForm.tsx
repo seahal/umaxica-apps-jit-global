@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 // The OTP step of an email or telephone registration.
 //
 // The code itself never crosses the boundary: the server sends only what the page shows — the
@@ -11,6 +13,7 @@ import TextField from "@/components/ui/TextField";
 import CeremonyCancellation, {
   type CeremonyCancellationProps,
 } from "@/features/auth/CeremonyCancellation";
+import OtpResendButton, { type OtpResendMessages } from "@/features/auth/otp/OtpResendButton";
 import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
@@ -26,6 +29,7 @@ export type OtpVerificationFormProps = {
   code_placeholder: string;
   submit_label: string;
   delivery_help: string;
+  otp_resend: { endpoint: string; state: string; messages: OtpResendMessages };
   /** Interactive challenge required by email registration checkpoints. */
   turnstile?: TurnstileWidgetProps | null;
   /** Heading shown above the validation errors, or null when there are none. */
@@ -44,11 +48,14 @@ export default function OtpVerificationForm({
   code_placeholder: codePlaceholder,
   submit_label: submitLabel,
   delivery_help: deliveryHelp,
+  otp_resend: otpResend,
   turnstile,
   error_heading: errorHeading,
   errors,
   cancel,
 }: OtpVerificationFormProps) {
+  const [passCode, setPassCode] = useState("");
+
   return (
     <Page
       title={title}
@@ -98,6 +105,15 @@ export default function OtpVerificationForm({
           autoComplete="one-time-code"
           inputMode="numeric"
           pattern="[0-9]*"
+          value={passCode}
+          onChange={setPassCode}
+        />
+
+        <OtpResendButton
+          endpoint={otpResend.endpoint}
+          state={otpResend.state}
+          messages={otpResend.messages}
+          onResent={() => setPassCode("")}
         />
 
         {turnstile ? (

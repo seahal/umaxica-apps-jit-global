@@ -82,9 +82,8 @@ and drift as controllers are added.
 | Policy root                                            | Plane      | Subclasses | Representative routes                                     |
 | ------------------------------------------------------ | ---------- | ---------- | --------------------------------------------------------- |
 | `Auth::App::ApplicationController`                     | Global     | 60         | `/`, `/sign/in`, `/preference`                            |
-| `Auth::Com::ApplicationController`                     | Global     | 44         | `/`, `/sign/in`                                           |
 | `Auth::Org::ApplicationController`                     | Global     | 36         | `/`, `/sign/in`                                           |
-| `Auth::{App,Com,Org}::BareController`                  | Global     | 11 each    | `/health`, `/revision`, `/edge/v0/token/check`            |
+| `Auth::{App,Org}::BareController`                      | Global     | 11 each    | `/health`, `/revision`                                    |
 | `Base::App::ApplicationController`                     | Global     | 71         | `/`, dashboard pages                                      |
 | `Base::Com::ApplicationController`                     | Global     | 59         | `/`, `/preference`                                        |
 | `Base::Org::ApplicationController`                     | Global     | 70         | `/`, `/iam`, `/support`, `/settings`                      |

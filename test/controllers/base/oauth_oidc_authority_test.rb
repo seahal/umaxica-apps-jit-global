@@ -1044,7 +1044,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
                     !(rp_token.device_session_id && OpAppGrant.exists?(
-                      device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                      device_session_id: rp_token.device_session_id,
+                      oidc_client_id: rp_client.client_id, revoked_at: nil,
                     ))
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
@@ -1126,7 +1127,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
                     !(rp_token.device_session_id && OpOrgGrant.exists?(
-                      device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                      device_session_id: rp_token.device_session_id,
+                      oidc_client_id: rp_client.client_id, revoked_at: nil,
                     ))
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current

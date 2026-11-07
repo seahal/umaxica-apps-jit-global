@@ -4,6 +4,14 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class CoreBrowserCredentialContractTest < ActiveSupport::TestCase
+  test "core browser issuer supports app and org resource types and refuses retired or unknown values" do
+    assert_equal "surface:CORE_APP", CoreBrowserCredentialContract.core_jwt_issuer_id("client")
+    assert_equal "surface:CORE_ORG", CoreBrowserCredentialContract.core_jwt_issuer_id("operator")
+    [nil, "", "visitor", "unknown"].each do |resource_type|
+      assert_raises(ArgumentError) { CoreBrowserCredentialContract.core_jwt_issuer_id(resource_type) }
+    end
+  end
+
   test "cookie options encode required core browser flags" do
     access = CoreBrowserCredentialContract.access_cookie_options(expires_at: 10.minutes.from_now)
     refresh = CoreBrowserCredentialContract.refresh_cookie_options(expires_at: 1.day.from_now)

@@ -8,7 +8,7 @@ namespace :identifier_hmac do
   task :rotate, %i(realm channel) => :environment do |_task, args|
     realm = args[:realm]
     channel = args[:channel]
-    unless %w(app com org).include?(realm) && %w(email telephone).include?(channel)
+    unless %w(app org).include?(realm) && %w(email telephone).include?(channel)
       raise ArgumentError, "identifier rotation requires an explicit supported realm and channel"
     end
 
@@ -32,8 +32,6 @@ namespace :identifier_hmac do
         case [realm, channel]
         when ["app", "email"] then "public.rotate_client_emails_hmac"
         when ["app", "telephone"] then "public.rotate_client_telephones_hmac"
-        when ["com", "email"] then "public.rotate_visitor_emails_hmac"
-        when ["com", "telephone"] then "public.rotate_visitor_telephones_hmac"
         when ["org", "email"] then "public.rotate_operator_emails_hmac"
         when ["org", "telephone"] then "public.rotate_operator_telephones_hmac"
         else raise ArgumentError, "unsupported identifier maintenance function"

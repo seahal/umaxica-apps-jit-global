@@ -17,7 +17,7 @@ module Jit
         test "auth keyring audiences are the union of the per-resource-type audiences" do
           audiences = JitSecurityJwtRegistry.issuer("auth").audiences
 
-          assert_equal %w(umaxica-api-client umaxica-api-visitor umaxica-api-operator).sort, audiences.sort
+          assert_equal %w(umaxica-api-client umaxica-api-operator).sort, audiences.sort
         end
       end
     end

@@ -2,9 +2,10 @@
 
 ## Ownership
 
-Visa owns OP authentication and authority-stop decisions independently for APP, COM and ORG. Base,
-Core, Warp, Edit, Palm and Tech own their RP cookies, local sessions and return routes. A browser
-cookie on one host never authorizes mutation of another surface's session.
+Visa owns OP authentication and authority-stop decisions independently for APP and ORG. Base, Core,
+Warp, Edit, Palm and Tech own their RP cookies, local sessions and return routes. A browser cookie on
+one host never authorizes mutation of another surface's session. COM has no authentication or OP
+session surface; Base COM remains anonymous.
 
 `OpAuthorityStopCommitter` is the realm-specific writer that stops OP roots and grants. The durable
 stop has root, grant, cutoff and BCL participant children. Sign-out is not a persisted sign-out-flow
@@ -43,6 +44,17 @@ not restore local state and leaves the token subject to its original expiry. The
 only the matching notice and refuses an active session or replay. If the person does not confirm at
 Visa, the initiating browser remains signed out locally; the OP device and unrelated grants remain
 active.
+
+Visa's APP and ORG `/oauth/revoke` leaves are protocol endpoints that inherit directly from
+`ActionController::API`. They authenticate the registered client from the request body and bind the
+submitted token to that client's own RP grant; browser cookies, Rails sessions, Origin and Fetch
+Metadata do not authorize revocation. The first-party RP clients currently use `private_key_jwt`.
+The endpoint retains a 20-per-minute source-IP limit before client authentication and adds a
+600-per-minute limit for an authenticated client. RP servers send sign-outs for many users from a
+shared source IP, so the client limit allows short bursts of up to ten requests per second while
+limiting a faulty or misused client; the source-IP limit remains the unauthenticated guard. The ORG
+`/oauth/token` leaf remains on its existing browser-forgery-protected base and is a separate
+unresolved protocol-boundary residual.
 
 RP logout controllers use the local-session-first launcher and do not read or send a stored ID Token
 hint. The separate shared-role `BrowserRpAuthentication` branch still reads the OP grant chain for

@@ -42,9 +42,47 @@ module Authentication
         end
 
       class << self
-        attr_accessor :token_oidc_jti, :token_last_used_at, :token_created_at,
-                      :token_user_id, :token_device_session_id, :token_device_session,
-                      :token_staff_id
+        def token_oidc_jti = @token_oidc_jti
+
+        def token_oidc_jti=(value)
+          @token_oidc_jti = value
+        end
+
+        def token_last_used_at = @token_last_used_at
+
+        def token_last_used_at=(value)
+          @token_last_used_at = value
+        end
+
+        def token_created_at = @token_created_at
+
+        def token_created_at=(value)
+          @token_created_at = value
+        end
+
+        def token_user_id = @token_user_id
+
+        def token_user_id=(value)
+          @token_user_id = value
+        end
+
+        def token_device_session_id = @token_device_session_id
+
+        def token_device_session_id=(value)
+          @token_device_session_id = value
+        end
+
+        def token_device_session = @token_device_session
+
+        def token_device_session=(value)
+          @token_device_session = value
+        end
+
+        def token_staff_id = @token_staff_id
+
+        def token_staff_id=(value)
+          @token_staff_id = value
+        end
 
         def touches
           @touches ||= []

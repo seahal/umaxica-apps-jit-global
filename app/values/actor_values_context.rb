@@ -45,7 +45,8 @@ class ActorValuesContext < Data.define(
 
   # Actor role predicates depend on actor_type. These are role predicates, not
   # authorization gates -- protected behavior must still go through ActionPolicy.
-  ROLE_TYPES = %i(client visitor operator).freeze
+  ACTOR_TYPES = %i(client operator unauthenticated).freeze
+  ROLE_TYPES = %i(client operator).freeze
 
   class << self
     # The safe baseline context for unbound paths: BareController, jobs,
@@ -96,6 +97,7 @@ class ActorValuesContext < Data.define(
   # Validate the enum axes at construction so invalid values fail fast rather
   # than silently flowing through policies and logs.
   def initialize(tld:, surface:, transport:, channel:, **rest)
+    validate_axis!(:actor_type, rest.fetch(:actor_type), ACTOR_TYPES)
     validate_axis!(:tld, tld, TLDS, allow_nil: true)
     validate_axis!(:surface, surface, SURFACES)
     validate_axis!(:transport, transport, TRANSPORTS)
@@ -116,8 +118,6 @@ class ActorValuesContext < Data.define(
   def operator? = actor_type == :operator
 
   def client? = actor_type == :client
-
-  def visitor? = actor_type == :visitor
 
   def browser? = channel == :browser
 

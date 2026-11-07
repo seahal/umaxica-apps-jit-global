@@ -219,7 +219,6 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       base.post(base_app_identity_passkeys_path(ri: "jp"), params: { authenticity_token: csrf }, headers: base_headers)
 
-      assert_equal 303, base.response.status, base.response.body
       base_browser_nonce = base.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY]
       begin
         fv5334 = base
@@ -256,7 +255,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       end
       authorization_uri = URI.parse(base.response.location)
 
-      assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), authorization_uri.host
+      assert_equal [303, ENV.fetch("PUBLIC_VISA_SERVICE_URL")], [base.response.status, authorization_uri.host]
       base.host!(authorization_uri.host)
       base.https!
       base.get(
@@ -268,15 +267,14 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         },
       )
 
-      assert_equal 303, base.response.status, base.response.body
       jump_uri = URI.parse(base.response.location)
 
-      assert_equal "jump.umaxica.net", jump_uri.host
+      assert_equal [303, "jump.umaxica.net"], [base.response.status, jump_uri.host], base.response.body
       jump_token = Rack::Utils.parse_nested_query(jump_uri.query).fetch("rt")
       jump_claims, = JWT.decode(jump_token, nil, false)
       registration_uri = URI.parse(jump_claims.fetch("url"))
 
-      assert_equal auth_host, registration_uri.host
+      assert_equal [303, auth_host], [base.response.status, registration_uri.host], base.response.body
       entry_ref = Rack::Utils.parse_nested_query(registration_uri.query).fetch("entry_ref")
       BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
       oidc_state = Rack::Utils.parse_nested_query(authorization_uri.query).fetch("state")
@@ -301,11 +299,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       )
       browser.get(registration_uri.request_uri, headers: auth_navigation_headers)
 
-      assert_equal 303, browser.response.status, browser.response.body
-
       confirmation_uri = URI.parse(browser.response.location)
 
-      assert_equal base_host, confirmation_uri.host
+      assert_equal [303, base_host], [browser.response.status, confirmation_uri.host], browser.response.body
       base.host!(base_host)
       base.https!
       base_navigation_headers = {
@@ -317,33 +313,32 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       }
       base.get(confirmation_uri.request_uri, headers: base_navigation_headers)
 
-      assert_equal 200, base.response.status, base.response.body
+      confirmation_page_status = base.response.status
       confirmation_csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
       base.post(
         confirmation_uri.request_uri,
         params: { authenticity_token: confirmation_csrf }, headers: base_navigation_headers,
       )
 
-      assert_equal 303, base.response.status, base.response.body
-
       auth_return_uri = URI.parse(base.response.location)
 
-      assert_equal auth_host, auth_return_uri.host
-      assert_equal entry_ref, Rack::Utils.parse_nested_query(auth_return_uri.query).fetch("entry_ref")
+      assert_equal [200, 303, auth_host, entry_ref],
+                   [confirmation_page_status, base.response.status, auth_return_uri.host,
+                    Rack::Utils.parse_nested_query(auth_return_uri.query).fetch("entry_ref"),],
+                   base.response.body
       browser.get(auth_return_uri.request_uri, headers: auth_navigation_headers)
-
-      assert_equal 303, browser.response.status, browser.response.body
 
       passkey_uri = URI.parse(browser.response.location)
 
-      assert_equal auth_host, passkey_uri.host
-      assert_equal new_auth_app_verification_registration_passkey_path, passkey_uri.path
+      assert_equal [303, auth_host, new_auth_app_verification_registration_passkey_path],
+                   [browser.response.status, passkey_uri.host, passkey_uri.path], browser.response.body
       browser.get(passkey_uri.request_uri, headers: auth_navigation_headers)
 
-      assert_equal 303, browser.response.status, browser.response.body
+      registration_redirect_status = browser.response.status
       browser.follow_redirect!(headers: auth_navigation_headers)
 
-      assert_equal 200, browser.response.status, "registration page must render after Base confirmation"
+      assert_equal [303, 200], [registration_redirect_status, browser.response.status],
+                   "registration page must render after Base confirmation"
       page = JSON.parse(Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']").text)
       panel = page.fetch("props").fetch("panel")
       csrf = Nokogiri::HTML(browser.response.body).at_css('meta[name="csrf-token"]')["content"]
@@ -363,8 +358,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         headers: auth_headers.merge("X-CSRF-Token" => csrf), as: :json,
       )
 
-      assert_equal 201, browser.response.status, browser.response.body
-      assert_equal passkey_count, ClientPasskey.count
+      assert_equal [201, passkey_count], [browser.response.status, ClientPasskey.count], browser.response.body
       handoff_uri = URI.parse(browser.response.parsed_body.fetch("redirect_url"))
       handoff_path = handoff_uri.path
       handoff_path = "#{handoff_path}?#{handoff_uri.query}" if handoff_uri.query.present?
@@ -376,7 +370,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         headers: auth_headers,
       )
 
-      assert_equal 303, browser.response.status
+      handoff_status = browser.response.status
       completion_uri = URI.parse(browser.response.location)
       base.host!(completion_uri.host)
       base.https!
@@ -384,49 +378,48 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
       confirmation_error = (base.response.media_type == "text/plain") ? base.response.body : base.response.media_type
 
-      assert_equal 200, base.response.status,
+      assert_equal [303, 200], [handoff_status, base.response.status],
                    "O-9 completion response must render its Base continuation: #{confirmation_error}"
       completion_form = Nokogiri::HTML(base.response.body).at_css("form")
       completion_params = completion_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       base.post(completion_form["action"], params: completion_params, headers: base_headers)
 
-      assert_equal 303, base.response.status
-      assert_equal passkey_count + 1, ClientPasskey.count
       destination = URI.parse(base.response.location)
 
-      assert_equal base_host, destination.host
+      assert_equal [303, passkey_count + 1, base_host],
+                   [base.response.status, ClientPasskey.count, destination.host]
       issuance = ClientSecretIssuance.find_by!(client_id: actor.id, origin: "passkey_registration")
       expected_count = [2, 20 - active_count].min
 
-      assert_equal expected_count, issuance.planned_count
-      assert_nil issuance.encrypted_payload
+      assert_equal [expected_count, nil], [issuance.planned_count, issuance.encrypted_payload]
       base.get(destination.request_uri, headers: base_headers)
 
-      assert_equal 200, base.response.status
       page = JSON.parse(Nokogiri::HTML(base.response.body).at_css("script[data-page='app']").text)
       csrf = page.fetch("props").fetch("authenticity_token")
-      if active_count == 19
-        assert_equal I18n.t("base.app.secrets.distribution_one_present"), page.fetch("props").fetch("notice")
-      elsif active_count == 20
-        assert_equal I18n.t("base.app.secrets.distribution_omitted"), page.fetch("props").fetch("notice")
-        assert_nil issuance.reload.encrypted_payload
-        assert_nil issuance.expires_at
-        assert_equal 0, ClientSecretCredential.where(issuance_id: issuance.id).count
-        assert_equal 0, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count
-        assert_equal "omitted", page.fetch("props").fetch("state")
+      expected_notice =
+        if active_count == 19
+          I18n.t("base.app.secrets.distribution_one_present")
+        elsif active_count == 20
+          I18n.t("base.app.secrets.distribution_omitted")
+        end
+
+      assert_equal [200, expected_notice], [base.response.status, page.fetch("props").fetch("notice")]
+      if active_count == 20
+        assert_equal [nil, nil, 0, 0, "omitted"],
+                     [issuance.reload.encrypted_payload, issuance.expires_at,
+                      ClientSecretCredential.where(issuance_id: issuance.id).count,
+                      ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count,
+                      page.fetch("props").fetch("state"),]
         next
-      else
-        assert_nil page.fetch("props").fetch("notice")
       end
       base.post(
         base_app_secret_issuance_presentation_path(issuance.public_id, ri: "jp"),
         headers: base_headers, params: { authenticity_token: csrf },
       )
 
-      assert_equal 200, base.response.status
       values = Nokogiri::HTML(base.response.body).css("[data-secret-value] code").map(&:text)
 
-      assert_equal expected_count, values.length
+      assert_equal [200, expected_count], [base.response.status, values.length]
       values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
       csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
       base.patch(
@@ -434,18 +427,17 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         headers: base_headers, params: { authenticity_token: csrf, stored: "1" },
       )
 
-      assert_equal 303, base.response.status
       values.each { |value| assert ClientSecretLookupQuery.call(client: actor, secret: value) }
-      assert_equal active_count + expected_count,
-                   ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
+      assert_equal [303, active_count + expected_count],
+                   [base.response.status,
+                    ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count,]
       base.get(base_app_secret_issuance_path(issuance.public_id, ri: "jp"), headers: base_headers)
 
-      assert_equal 200, base.response.status
-      if active_count == 19
-        page = JSON.parse(Nokogiri::HTML(base.response.body).at_css("script[data-page='app']").text)
+      page = JSON.parse(Nokogiri::HTML(base.response.body).at_css("script[data-page='app']").text)
+      expected_notice = (active_count == 19) ? I18n.t("base.app.secrets.distribution_one_confirmed") : nil
+      actual_notice = page.fetch("props").fetch("notice")
 
-        assert_equal I18n.t("base.app.secrets.distribution_one_confirmed"), page.fetch("props").fetch("notice")
-      end
+      assert_equal [200, expected_notice], [base.response.status, actual_notice]
     end
   end
 

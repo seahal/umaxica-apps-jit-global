@@ -15,9 +15,7 @@ class EmailCredentialRegistrationOtpResendIssuer
     @actor, @token, @email, @transaction, @browser_nonce = actor, token, email, transaction, browser_nonce
     @surface, @pending_status, @bootstrap_model =
       case [actor, token, email, transaction]
-      in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction]
-        ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
-      in [Client, ClientToken, ClientEmail, nil]
+      in [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction | nil]
         ["app", ClientEmailStatus::UNVERIFIED, ClientStepUpCeremonyTransaction]
       else raise ArgumentError, "unsupported Email registration resend realm"
       end
@@ -57,16 +55,18 @@ class EmailCredentialRegistrationOtpResendIssuer
         end
       end
 
-    if actor.is_a?(Client)
-      AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: actor, &resend)
-    else
-      resend.call(false)
-    end
+    resend_for_actor(resend)
   end
 
   private
 
   attr_reader :actor, :token, :email, :transaction, :browser_nonce, :surface, :pending_status
+
+  def resend_for_actor(resend)
+    return AppRegisteredContactDestinationGuard.with_lock(contact: email, owner: actor, &resend) if actor.is_a?(Client)
+
+    resend.call(false)
+  end
 
   def resend_under_original_parent(expected)
     transaction.reload

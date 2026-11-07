@@ -592,7 +592,7 @@ scope(module: :base, as: :base) do
         # `approve`/`release`; each is its own nested resource). `new` pages are the Step-Up-gated
         # confirmation screens. The org realm stays routed but every policy rule denies it: no
         # capability for disciplining operators is defined.
-        %i(app com org).each do |enforcement_realm|
+        %i(app org).each do |enforcement_realm|
           scope(path: enforcement_realm, as: enforcement_realm, defaults: { realm: enforcement_realm }) do
             resources :enforcement_cases, only: %i(index show new create) do
               resource :approval, only: %i(new create), controller: "enforcement_cases/approvals"

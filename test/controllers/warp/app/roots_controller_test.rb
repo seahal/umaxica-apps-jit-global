@@ -40,6 +40,19 @@ class Warp::App::RootsControllerTest < ActionDispatch::IntegrationTest
       ],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
     )
+    assert_equal(
+      {
+        "label" => I18n.t("layouts.shared.account_navigation.label"),
+        "signed_in" => false,
+        "links" => [
+          {
+            "label" => I18n.t("layouts.shared.account_navigation.sign_up_or_in"),
+            "href" => warp_app_sign_show_path(ri: "jp"),
+          },
+        ],
+      },
+      inertia_props.fetch("chrome").fetch("account_navigation"),
+    )
   end
 
   test "authenticated direct root request returns 403 without redirect" do
@@ -194,6 +207,8 @@ class Warp::App::RootsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "warp/app/roots/index", inertia_component
+    assert_not inertia_props.fetch("chrome").fetch("account_navigation").fetch("signed_in"),
+               "an expired session is signed out in the header"
   end
 
   test "root with a malformed bearer renders the anonymous root" do
@@ -551,8 +566,7 @@ class Warp::App::RootsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

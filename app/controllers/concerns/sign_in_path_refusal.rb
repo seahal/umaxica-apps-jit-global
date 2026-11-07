@@ -58,7 +58,7 @@ module SignInPathRefusal
   def clear_sign_in_path_continuity!
     surface = sign_in_refusal_surface.to_sym
     SignInCycleLocator.new(session, surface: surface).clear!
-    SignUpSessionState.for(session, surface: surface).clear_all! if %i(app com).include?(surface)
+    SignUpSessionState.for(session, surface: surface).clear_all! if surface == :app
     session.delete(SessionLimitGate::GATE_SESSION_KEY)
     session.delete(:pending_mfa)
     session.delete(:mfa_user_id)

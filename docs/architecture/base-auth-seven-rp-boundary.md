@@ -25,9 +25,9 @@ authorization boundary.
 The former Rails surface name was Side. Its current internal namespace is Warp; the registered
 `side-*` OIDC client identifiers, audiences, and signing namespaces remain protocol values. Visa
 uses independent `VISA_APP` and `VISA_ORG` issuer/key namespaces; Base retains `BASE_APP` and
-`BASE_ORG` for RP responsibilities. The `*_COM` namespaces remain registered until their Jump and
-key scaffolding is retired, but no corporate host publishes them or runs a credential ceremony. A
-Base RP credential is never authority proof for Visa, and a Visa authority token is never used as a
+`BASE_ORG` for RP responsibilities. Corporate authentication issuer and Jump namespaces are
+removed. Base com's anonymous Preference token issuer is separate from authentication and remains.
+A Base RP credential is never authority proof for Visa, and a Visa authority token is never used as a
 Base local RP credential.
 
 The RP `GET /sign` entry is non-mutating. Its CSRF-protected `POST /sign` refuses a browser that is

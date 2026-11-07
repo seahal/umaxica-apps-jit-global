@@ -206,7 +206,8 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
             )
             @created_client_ids << competitor.id
-            competitor_contact = competitor.public_send((channel == :email) ? :client_emails : :client_telephones).create!(
+            competitor_contacts = (channel == :email) ? competitor.client_emails : competitor.client_telephones
+            competitor_contact = competitor_contacts.create!(
               **contact_attributes.except(owner_key, status_key),
               status_key => verified_status,
             )
@@ -261,24 +262,11 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
 
             assert_withheld("Fault must retain the original verified proof") { proof == retained_proof }
             assert_nil transaction.otp_verifier
-            if scenario == :source_fault
-              assert_predicate transaction.reload, :consumed?
-              assert_withheld("Source failure must roll back candidate binding") {
-                original_contact == contact.reload.attributes
-              }
-              assert_withheld("Source failure must preserve the old binding") {
-                original_previous == previous.reload.attributes
-              }
-              assert_equal original_audits, audits.count
-            else
-              assert_withheld("A Ticket failure must roll back candidate binding") {
-                original_contact == contact.reload.attributes
-              }
-              assert_withheld("A Ticket failure must preserve the old binding") {
-                original_previous == previous.reload.attributes
-              }
-              assert_equal original_audits, audits.count
-            end
+            assert_predicate transaction.reload, :consumed? if scenario == :source_fault
+            assert_withheld("Persistence failure must retain both bindings") {
+              original_contact == contact.reload.attributes && original_previous == previous.reload.attributes
+            }
+            assert_equal original_audits, audits.count
           end
           if scenario == :registered_destination
             competitor_facts = competitor.reload.attributes
@@ -346,11 +334,12 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             assert_equal verified_status, contact.reload[status_key]
             assert_predicate contact, :binding_effective?
             assert_predicate previous.reload, :binding_released?
-            assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
-            assert_equal 1, audits.where(event_name: "released", contact_ref: previous.public_id).count
-            assert_equal 2, audits.where(
-              owner_ref: actor.public_id, actor_ref: actor.public_id, contact_kind: channel.to_s,
-            ).count
+            assert_equal [1, 1, 2],
+                         [audits.where(event_name: "finalized", contact_ref: contact.public_id).count,
+                          audits.where(event_name: "released", contact_ref: previous.public_id).count,
+                          audits.where(
+                            owner_ref: actor.public_id, actor_ref: actor.public_id, contact_kind: channel.to_s,
+                          ).count,]
             assert_predicate transaction.reload, :consumed?
             final_proof = transaction.attributes.slice(*proof.keys)
 
@@ -382,7 +371,6 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               audit_facts == audits.order(:id).map(&:attributes)
             }
           else
-            assert_equal :unavailable, status
             assert_withheld("Refusal must preserve verified candidate evidence") {
               original_contact == contact.reload.attributes
             }
@@ -405,7 +393,7 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               }
             end
 
-            assert_equal original_audits, audits.count
+            assert_equal [:unavailable, original_audits], [status, audits.count]
           end
 
           assert_withheld("Contact finalization must not mutate the root or spend OP evidence") {

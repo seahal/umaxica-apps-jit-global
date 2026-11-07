@@ -216,18 +216,29 @@ class BaseStepUpAdmissionIssuer
         else nil
         end
 
-      unless context.public_id == requirement.resource_ref &&
-          context.state_id == context_state_model::PENDING && context.expires_at > now &&
-          context.bound_subject == expected_subject && context.grant_id == grant.id &&
-          context.requested_acr == OidcAuthorizeRequestResolver::STEP_UP_ACR &&
-          authorization.intent == "step_up" && authorization.pending? && !authorization.expired?(now:) &&
-          !authorization.login_challenge_expired?(now:) && authorization.surface == binding.surface &&
-          authorization.client_id == grant.oidc_client_id && grant_root_id == token.id &&
-          grant.device_session_id == device_session.id && grant.active?(now)
+      unless oidc_context_matches?(context, context_state_model, requirement, expected_subject, grant, now) &&
+          oidc_authorization_matches?(authorization, binding, grant, now) &&
+          oidc_grant_matches?(grant, grant_root_id, token, device_session, now)
         deny!("OIDC step-up context binding is unavailable", "invalid_admission")
       end
     rescue ActiveRecord::RecordNotFound
       deny!("OIDC step-up context binding is unavailable", "invalid_admission")
+    end
+
+    def oidc_context_matches?(context, state_model, requirement, expected_subject, grant, now)
+      context.public_id == requirement.resource_ref && context.state_id == state_model::PENDING &&
+        context.expires_at > now && context.bound_subject == expected_subject &&
+        context.grant_id == grant.id && context.requested_acr == OidcAuthorizeRequestResolver::STEP_UP_ACR
+    end
+
+    def oidc_authorization_matches?(authorization, binding, grant, now)
+      authorization.intent == "step_up" && authorization.pending? && !authorization.expired?(now:) &&
+        !authorization.login_challenge_expired?(now:) && authorization.surface == binding.surface &&
+        authorization.client_id == grant.oidc_client_id
+    end
+
+    def oidc_grant_matches?(grant, grant_root_id, token, device_session, now)
+      grant_root_id == token.id && grant.device_session_id == device_session.id && grant.active?(now)
     end
 
     def oidc_step_up_context_model(surface)

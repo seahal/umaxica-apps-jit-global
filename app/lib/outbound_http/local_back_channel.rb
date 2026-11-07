@@ -38,7 +38,7 @@ module OutboundHttp
       [
         hosts.acme_service, hosts.acme_corporate, hosts.acme_staff,
         hosts.base_service, hosts.base_corporate, hosts.base_staff,
-        hosts.visa_service, hosts.visa_corporate, hosts.visa_staff,
+        hosts.visa_service, hosts.visa_staff,
       ].map { |configured| configured.host.to_s.downcase }.include?(host.to_s.downcase)
     end
 

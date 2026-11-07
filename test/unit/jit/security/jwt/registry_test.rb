@@ -33,7 +33,7 @@ module Jit
             issuers = JitSecurityJwtRegistry.reload!
 
             assert_equal "auth-kid", issuers.fetch("auth").current_kid
-            assert_equal %w(umaxica-api-client umaxica-api-visitor umaxica-api-operator),
+            assert_equal %w(umaxica-api-client umaxica-api-operator),
                          issuers.fetch("auth").audiences
             assert_equal "pref-app-kid", issuers.fetch("preference_app").current_kid
             assert_equal ["app"], issuers.fetch("preference_app").audiences

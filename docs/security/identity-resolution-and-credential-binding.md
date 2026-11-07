@@ -11,7 +11,7 @@ receipt, an external provider callback, a passkey assertion, and an app Secret a
 explicit operation; none is a universal actor lookup key. An effective binding is verified,
 finalized, owned by one actor, and not released.
 
-APP/COM email sign-in and security-lock recovery resolve only effective email bindings. A
+APP email sign-in and security-lock recovery resolve only effective email bindings. A
 candidate whose binding is not finalized cannot select an actor or receive authentication or
 recovery OTP delivery, including when its mutable email status already says `VERIFIED`.
 Ordinary unverified and pending-sign-up candidates remain outside these authority paths.
@@ -95,18 +95,18 @@ Status alone is not proof. Seventy owned historical-data probe scenarios passed;
 20-database fleet reconstructed from migrations and the focused Contact/OTP matrix passed.
 Shared-environment application and the complete candidate/failure matrix remain unverified.
 The shared OTP verification failure-budget shape and same-scope destination-exhaustion tradeoff are
-approved. App/com email/telephone signup, app/com email sign-in and app/com/org authenticated
+approved. APP email/telephone sign-up, APP email sign-in and APP/ORG authenticated
 destination confirmation now use a shared five-failure counter with a fixed 15-minute deadline,
 retaining candidate limits. Recovery/reentry CommonOtp callers have separate purpose scopes.
 Email resend now selects only the effective binding and leaves independent candidates untouched;
 dependency/provider failures are reported and raised rather than labeled invalid browser state.
 These fixes do not certify the complete OTP lifecycle or late-delivery checks.
 Accepted email receipt processing, valid-state resend and well-formed six-digit verification
-share a 100ms monotonic response floor across APP/COM real and dummy branches. It covers the
+share a 100ms monotonic response floor across APP real and dummy branches. It covers the
 operation rather than only lookup. Malformed input remains a genuine rejection; dependency
 exceptions still propagate and database/verification deadlines are unchanged. Local HTTP
 measurements narrowed ordinary timing gaps but do not establish equal tails or production parity.
-App/com resend endpoints now also require confirmed sign-in ceremony admission; a signed resend
+APP resend endpoints now also require confirmed sign-in ceremony admission; a signed resend
 state alone cannot authorize an independent unadmitted browser or allocate a dispatch slot.
 Resend state issuance and parsing additionally require the server-resolved Auth continuity digest
 in the existing MessageEncryptor purpose. Two independently admitted browsers cannot exchange

@@ -294,26 +294,18 @@ class Auth::App::TestCsrfController
       "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
       "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
       "JWT_ACME_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_ACME_COM_ACTIVE_KID" => "acme-com-test",
-      "JWT_ACME_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_CORE_APP_ACTIVE_KID" => "core-app-test",
       "JWT_CORE_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_CORE_ORG_ACTIVE_KID" => "core-org-test",
       "JWT_CORE_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_CORE_COM_ACTIVE_KID" => "core-com-test",
-      "JWT_CORE_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_BASE_APP_ACTIVE_KID" => "base-app-test",
       "JWT_BASE_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_BASE_ORG_ACTIVE_KID" => "base-org-test",
       "JWT_BASE_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_BASE_COM_ACTIVE_KID" => "base-com-test",
-      "JWT_BASE_COM_PRIVATE_KEY" => jump_rt_key,
     }.each do |key, value|
       @jump_rt_env_originals[key] = ENV[key] unless @jump_rt_env_originals.key?(key)
       ENV[key] = value
@@ -521,8 +513,7 @@ class Auth::App::AuthPublicControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+    %w(AUTH_APP AUTH_ORG ACME_APP ACME_ORG CORE_APP CORE_ORG BASE_APP BASE_ORG).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end

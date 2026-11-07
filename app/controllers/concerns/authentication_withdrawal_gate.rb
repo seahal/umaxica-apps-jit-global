@@ -44,7 +44,6 @@ module AuthenticationWithdrawalGate
   def withdrawal_controller_allowlisted?
     %w(
       base/app/identity/withdrawals
-      base/com/identity/withdrawals
     ).include?(controller_path) && %w(show new edit update create destroy).include?(action_name)
   end
 
@@ -61,14 +60,13 @@ module AuthenticationWithdrawalGate
 
     case withdrawal_gate_surface_family
     when "app" then edit_base_app_identity_withdrawal_path(ri: ri)
-    when "com" then edit_base_com_identity_withdrawal_path(ri: ri)
     when "org" then base_org_identity_withdrawal_path(ri: ri)
     else
       raise ArgumentError, "no withdrawal redirect path configured for controller_path=#{controller_path}"
     end
   end
 
-  # Derives the app/com/org family from the surface/family/... controller_path shape shared by
+  # Derives the app/org family from the surface/family/... controller_path shape shared by
   # every surface (auth, base, core, warp). A rescued default here would silently cross surfaces
   # (e.g. redirect an org request to the app withdrawal page), so unknown families raise instead.
   def withdrawal_gate_surface_family

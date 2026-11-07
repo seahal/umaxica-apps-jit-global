@@ -208,6 +208,8 @@ group :development, :test do
   gem "sorbet"
   # herb
   gem "herb"
+  # db
+  gem "active_record_doctor", ">= 2.1"
 end
 
 group :test do

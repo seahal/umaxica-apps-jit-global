@@ -80,8 +80,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     automatic_relay_responses << ["POST", "/sign", response.status]
     visa_host = visa_host_for_test_base_host(base_host)
     target = URI.parse(jump_rt_url_from_location_for_test(response.location))
-
-    assert_equal visa_host, target.host
+    initial_authorization_host = target.host
     visa_browser = open_session
     visa_browser.host!(visa_host)
     visa_browser.https!
@@ -105,8 +104,6 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
       "#{name}=#{Rack::Utils.escape(value)}"
     end.join("; ")
     target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
-
-    assert_equal auth_host, target.host
     entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
     flow = authorization_transaction_for_test(binding)
@@ -123,7 +120,6 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     automatic_relay_responses << ["GET", attach_target.path, browser.response.status]
     confirmation_target = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
-    assert_equal visa_host, confirmation_target.host
     confirmation_path = confirmation_target.path
     visa_browser.get(
       confirmation_target.request_uri, headers: {
@@ -133,7 +129,8 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     automatic_relay_responses << ["GET", confirmation_path, visa_browser.response.status]
     auth_target = URI.parse(jump_rt_url_from_location_for_test(visa_browser.response.location))
 
-    assert_equal auth_host, auth_target.host
+    assert_equal [visa_host, auth_host, visa_host, auth_host],
+                 [initial_authorization_host, target.host, confirmation_target.host, auth_target.host]
     browser.get(auth_target.request_uri, headers: NAVIGATION_HEADERS)
     automatic_relay_responses << ["GET", auth_target.path, browser.response.status]
     clean_entry_target = URI.parse(browser.response.location)
@@ -203,9 +200,9 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
           transport.verify
           key_source.verify
 
-          assert_equal "login.microsoftonline.com", URI.parse(captured.fetch(:uri)).host
-          assert_predicate captured.fetch(:params).fetch(:code_verifier), :present?
-          assert_equal 303, browser.response.status
+          assert_equal ["login.microsoftonline.com", true, 303],
+                       [URI.parse(captured.fetch(:uri)).host,
+                        captured.fetch(:params).fetch(:code_verifier).present?, browser.response.status,]
           passkey_binding = Rack::Utils.parse_nested_query(
             URI.parse(browser.response.location).query.to_s,
           ).fetch("fb")
@@ -221,7 +218,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
       headers: { "X-CSRF-Token" => csrf, "Origin" => origin, "Sec-Fetch-Site" => "same-origin" }, as: :json,
     )
 
-    assert_equal 200, browser.response.status
+    options_status = browser.response.status
     options = browser.response.parsed_body
     assertion = fake.get(
       challenge: options.fetch("options").fetch("challenge"),
@@ -234,7 +231,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
         }, headers: { "X-CSRF-Token" => csrf, "Origin" => origin, "Sec-Fetch-Site" => "same-origin" }, as: :json,
       )
     end
-    assert_equal 200, browser.response.status
+    assert_equal [200, 200], [options_status, browser.response.status]
     handoff_path = auth_org_sign_oidc_handoff_path(ri: "jp")
     browser.get(
       handoff_path, headers: {
@@ -243,11 +240,11 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     )
     automatic_relay_responses << ["GET", URI.parse(handoff_path).path, browser.response.status]
 
-    assert_equal 303, browser.response.status
-    assert_predicate flow.reload, :authenticated?
+    handoff_status = browser.response.status
     result_uri = URI.parse(browser.response.location)
 
-    assert_equal visa_host, result_uri.host
+    assert_equal [303, true, visa_host],
+                 [handoff_status, flow.reload.authenticated?, result_uri.host]
     assert_difference("OperatorToken.count", 1) do
       visa_browser.get(
         result_uri.request_uri, headers: {
@@ -313,8 +310,10 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
           end
 
-          assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
-          assert_withheld { Actor.context.equal?(outer_actor) }
+          assert_withheld do
+            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) &&
+              Actor.context.equal?(outer_actor)
+          end
           assert_equal 200, protocol_browser.response.status
           [protocol_browser.response.status, { "Content-Type" => "application/json" },
            protocol_browser.response.body,]
@@ -337,8 +336,10 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
           end
 
-          assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
-          assert_withheld { Actor.context.equal?(outer_actor) }
+          assert_withheld do
+            ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) &&
+              Actor.context.equal?(outer_actor)
+          end
           assert_equal 200, protocol_browser.response.status
           [protocol_browser.response.status, { "Content-Type" => "application/json" },
            protocol_browser.response.body,]
@@ -367,12 +368,17 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     transport.verify_stubbed_calls
     get(base_org_selector_path(ri: "jp"))
 
-    assert_response :see_other
-    assert_redirected_to base_org_dashboard_path(ri: "jp")
+    selector_redirect_status = response.status
+    selector_redirect_target = URI.parse(response.location)
     follow_redirect!
 
-    assert_response :success, response.body
-    assert_equal "base/org/dashboards/show", inertia_component
+    expected_dashboard_target = URI.parse(base_org_dashboard_path(ri: "jp"))
+
+    assert_equal [303, expected_dashboard_target.path, expected_dashboard_target.query, 200,
+                  "base/org/dashboards/show",],
+                 [selector_redirect_status, selector_redirect_target.path, selector_redirect_target.query,
+                  response.status, inertia_component,],
+                 response.body
 
     assert_equal [
       ["POST", "/sign", 303],

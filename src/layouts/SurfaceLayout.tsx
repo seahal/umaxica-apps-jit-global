@@ -116,6 +116,23 @@ export default function SurfaceLayout({ children }: { children: ReactNode }) {
               ) : null}
               <span className="text-sm font-normal text-fg-muted">({chrome.surface})</span>
             </p>
+
+            {chrome.account_navigation ? (
+              <nav aria-label={chrome.account_navigation.label}>
+                <ul className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+                  {chrome.account_navigation.links.map((link) => (
+                    <li key={link.href}>
+                      <a
+                        href={link.href}
+                        className={NAV_LINK}
+                      >
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ) : null}
           </div>
         </header>
 

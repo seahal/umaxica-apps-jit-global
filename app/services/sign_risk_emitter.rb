@@ -9,8 +9,6 @@ class SignRiskEmitter
   # only if a measured p99 regression on these endpoints justifies it.
 
   def self.emit(name, **payload)
-    raise ArgumentError, "unsupported risk actor: visitor" if payload.key?(:visitor_id)
-
     return unless feature_enabled?
 
     event = SignRiskEvent.new(name, payload: payload)

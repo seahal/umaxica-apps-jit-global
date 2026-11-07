@@ -54,12 +54,12 @@ entire feature or the full suite passed.
 | WU-0 | Done and verified | Baseline inventory: `plans/2026-10-28-baseline-failing-tests.md`; current comparison: H-2 evidence below. |
 | WU-0R | Open | Fresh VM reference-data construction remains unverified; use `bin/setup` and `db:seed`, then record the fixture/reference source. |
 | WU-P0 | Done as owner-approved design; implementation unverified | Owner decision in `zero.md`; remaining Experience decisions are in `plans/backlog/2026-11-07-experience-consent-affinity-redesign.md`. |
-| WU-1 | Open | Realm and audience boundary still needs current public-entry verification; see the residual ledger. |
+| WU-1 | Open | `OidcIssuer` now rejects `nil`, blank, unknown, `visitor`, `customer`, and `com`, and keeps the supported client/operator aliases; its focused OIDC tests pass. Full route/client-contract closure remains open; see `evidence/2026-11-07-com-removal-acceptance-7K2P.md`. |
 | WU-2 | Retired by D-51 | No temporary old API repair; AC-20 is retired. |
-| WU-3 | Open | Atomic COM removal has not been closed with current route/HTTP evidence. |
-| WU-4 | Open | Shared COM consumers, health and eager-load closure remain. |
+| WU-3 | Open | The ten org Support COM enforcement routes are removed; the starting-HEAD route delta is exactly 20 host-specific removals and no additions. The strict `b6e7871` comparison still has 70 other removals and 54 additions already present before this task, so TC-3-1 remains open. |
+| WU-4 | Open | The inherited public COM Preference/content, Publishing, health and shared-job checks remain recorded. Current `Rails.application.eager_load!` passes; the full CI/config and ADR reconciliation remains open. |
 | WU-5 | Open; destructive work not authorized here | Database removal still needs the separate B-5 approval and recovery plan. |
-| WU-6 | Open | Boot, HTTP, important-test and failure-ID closure remains. |
+| WU-6 | Open | Current scoped auth/identifier/session tests and eager load pass. The sole full-suite snapshot remains red, and its 316 October-baseline-absent IDs are not all attributable; stale COM auth/database variables remain in read-only `.github/workflows/ci.yml`. |
 | WU-7 | Superseded | Replaced by the three-unit Experience/Consent/Affinity redesign backlog. |
 | WU-8 | Retired | Key-separation-only unit was withdrawn. |
 | WU-A1 | Open | Current sign-in classification/stop checks need reconciliation with accepted specs. |
@@ -90,19 +90,19 @@ step are in the linked backlog, and the latest failing-test evidence is in the H
 
 | AC | Owner WU | Status | Evidence / next step |
 |---|---|---|---|
-| AC-1 | WU-3 | Open | Residual ledger; verify every COM host through its public route. |
-| AC-2 | WU-3 | Open | Residual ledger; verify retired Base COM routes. |
-| AC-3 | WU-1, WU-3 | Open | Residual ledger; compare APP/ORG route inventories around the atomic removal. |
-| AC-4 | WU-1, WU-3 | Open | Residual ledger; verify accepted/rejected realm and audience boundaries. |
-| AC-5 | WU-3 | Open | Residual ledger; verify anonymous Base COM behavior. |
-| AC-6 | WU-3 | Open | Residual ledger; verify database isolation at the public boundary. |
-| AC-7 | WU-3, WU-4 | Open | Residual ledger; verify COM publishing/document surfaces. |
-| AC-8 | WU-4 | Open | Residual ledger; verify health dependencies after consumer removal. |
-| AC-9 | WU-4 | Open | Residual ledger; verify eager load and shared service entry points. |
-| AC-10 | WU-5 | Open | Residual ledger; await destructive-change approval and then verify all registries. |
-| AC-11 | WU-0, WU-3–6 | Open | The 17:14 H-2 table is complete with no unknown classifications, but the full suite remains red and has not been rerun after the later fixes; finish the critical-set and owner-side full-run comparison. |
-| AC-12 | WU-3–6 | Open | Residual ledger; complete COM runtime/credential cleanup and boot verification. |
-| AC-35 | WU-3 | Open | Residual ledger; verify public browser and HTTP state behavior. |
+| AC-1 | WU-3 | Done | Claude's 2026-11-07 run recorded 13 representative Auth/Visa/Core COM paths as 404 for GET and POST token requests. The inherited host matrix is recorded in `evidence/2026-11-07-com-removal-acceptance-7K2P.md`; it was not repeated here. |
+| AC-2 | WU-3 | Done | Claude's 2026-11-07 run recorded retired Base COM auth/identity/account/OIDC/Preference/JWKS routes as 404; the current Base route contract test passed. The inherited HTTP scope is recorded in the evidence. |
+| AC-3 | WU-1, WU-3 | Open | Task-start to result is EQ-1 only (20 host-specific removals, zero additions). The required b6-to-result comparison still has 10 host rows without a documented disposition and a four-row Core Preference DBSC route-document conflict; full row groups and sources are in the evidence. |
+| AC-4 | WU-1, WU-3 | Done | `OidcIssuer` rejects nil, blank, unknown, visitor, customer and COM values; supported client/operator aliases remain. The focused issuer suite and inherited app/org audience acceptance passed, with caller trace recorded in the evidence. |
+| AC-5 | WU-3 | Done | Claude's 2026-11-07 run passed Base COM anonymous Preference HTTP/API, cookie isolation and CSRF coverage. These public COM surfaces remain; inherited TC-5 results are in the evidence. |
+| AC-6 | WU-3 | Done | Claude's run recorded Base COM Preference access only to `com_setting` and Chronicle. No shared DB or schema was removed in this task. |
+| AC-7 | WU-3, WU-4 | Done | Claude's run recorded COM Info/Docs/News/Help rendering and ORG Publishing edit/publication checks as passing. |
+| AC-8 | WU-4 | Done | Claude's run recorded the remaining COM public-surface health checks as passing. |
+| AC-9 | WU-4 | Done | Current `bin/rails runner -e test 'Rails.application.eager_load!'` exits successfully; Claude's shared-job/service acceptance was 16 files / 131 runs green. |
+| AC-10 | WU-5 | Open | The earlier read-only catalog found only `com_setting` databases and clones. This turn could not recheck because PostgreSQL gave no response; CI still names retired COM databases and is read-only. No destructive operation ran. |
+| AC-11 | WU-0, WU-3–6 | Open | The current full-suite attempt stopped before test execution because PostgreSQL host `primary` did not resolve. Earlier complete snapshot: 16,984 runs / 146,404 assertions / 308 failures / 86 errors / 0 skips, with 316 baseline-absent IDs; no current failing/skipped IDs are available. |
+| AC-12 | WU-3–6 | Open | The scan classified and removed the listed live COM-auth branches and found no local COM auth credential keys; it found retired COM/visitor auth and database names in read-only `.github/workflows/ci.yml`. Accepted ADR reconciliation also remains. |
+| AC-35 | WU-3 | Done | Claude's 2026-11-07 run recorded the anonymous `www.umaxica.com/` browser/HTTP behavior as passing. No browser session was repeated here; the inherited result and limit are in the evidence. |
 | AC-20 | — | Retired by D-51 | No work; replaced by AC-20b. |
 | AC-20b | WU-7, WU-9 | Open | Experience redesign backlog; implement only from its future accepted shape. |
 | AC-21 | WU-7, WU-9 | Open | Experience redesign backlog; verify realm-specific credential handling. |

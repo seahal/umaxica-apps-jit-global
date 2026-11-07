@@ -4,16 +4,13 @@ version: 1
 stacks:
   importmap:
     - auth/app/application
-    - auth/com/application
     - auth/org/application
     - base/app/application
     - base/com/application
     - base/org/application
     - visa/app/application
-    - visa/com/application
     - visa/org/application
     - core/app/application
-    - core/com/application
     - core/org/application
     - jump/app/application
     - jump/com/application
@@ -24,16 +21,13 @@ stacks:
     - warp/org/application
   vite:
     - auth/app/inertia
-    - auth/com/inertia
     - auth/org/inertia
     - base/app/inertia
     - base/com/inertia
     - base/org/inertia
     - visa/app/inertia
-    - visa/com/inertia
     - visa/org/inertia
     - core/app/inertia
-    - core/com/inertia
     - core/org/inertia
     - palm/app/inertia
     - warp/app/inertia

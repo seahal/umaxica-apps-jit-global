@@ -60,10 +60,32 @@ class ChannelOtpVerificationFailureBudgetTest < ActiveSupport::TestCase
       connection&.close
     end
 
+    test "#{channel} budget accepts app and org and refuses retired or unknown surfaces" do
+      namespace = "otp-channel-surface-boundary:#{SecureRandom.hex(12)}"
+      connection = Umaxica::Valkey::Connection.new(namespace: namespace)
+      budget = model.new(connection: connection)
+      digest = "d" * 64
+
+      %i(app org).each do |surface|
+        assert_equal :verified, budget.verify!(
+          surface:, purpose: :authentication, channel:, destination_digest: digest, valid: true,
+        )
+      end
+
+      [nil, "", :visitor, :customer, :com, :unknown].each do |surface|
+        assert_raises(ArgumentError) do
+          budget.verify!(surface:, purpose: :authentication, channel:, destination_digest: digest, valid: true)
+        end
+      end
+    ensure
+      Umaxica::Valkey::Cleanup.delete_by_prefix(connection, prefix: "#{namespace}:") if connection
+      connection&.close
+    end
+
     test "#{channel} concurrent failures cannot allocate more than five attempts" do
       namespace = "otp-channel-concurrency:#{SecureRandom.hex(12)}"
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
-      scope = { surface: :com, purpose: :authentication, channel: channel, destination_digest: "e" * 64 }
+      scope = { surface: :org, purpose: :authentication, channel: channel, destination_digest: "e" * 64 }
       outcomes = 12.times.map do
         Concurrent::Promises.future do
           peer = Umaxica::Valkey::Connection.new(namespace: namespace)
@@ -75,7 +97,7 @@ class ChannelOtpVerificationFailureBudgetTest < ActiveSupport::TestCase
 
       assert_equal 4, outcomes.count(:invalid_code)
       assert_equal 8, outcomes.count(:locked)
-      assert_equal "5", connection.call("GET", connection.key("com:authentication:#{channel}:#{"e" * 64}"))
+      assert_equal "5", connection.call("GET", connection.key("org:authentication:#{channel}:#{"e" * 64}"))
     ensure
       Umaxica::Valkey::Cleanup.delete_by_prefix(connection, prefix: "#{namespace}:") if connection
       connection&.close
@@ -89,7 +111,7 @@ class ChannelOtpVerificationFailureBudgetTest < ActiveSupport::TestCase
       key = connection.key("app:sign_up:#{channel}:#{"c" * 64}")
       5.times { budget.verify!(**scope, valid: false) }
 
-      [{ surface: :com }, { surface: :org }, { purpose: :authentication },
+      [{ surface: :org }, { purpose: :authentication },
        { purpose: :credential_registration }, { purpose: :enforcement_recovery },
        { purpose: :withdrawal_reentry }, { destination_digest: "d" * 64 },].each do |difference|
         assert_equal :verified, budget.verify!(**scope.merge(difference), valid: true)

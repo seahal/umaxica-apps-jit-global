@@ -260,7 +260,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_equal OidcClientStoresStaticClientStore.clients.keys.sort, ids.sort
   end
 
-  test "visitor account does not expose ambiguous token endpoint auth method" do
+  test "first-party client does not expose ambiguous token endpoint auth method" do
     client = OidcClientRegistry.find!("warp-app-jp")
 
     assert_not_respond_to client, :token_endpoint_auth_method

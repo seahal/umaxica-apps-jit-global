@@ -13,7 +13,6 @@ module EmailCeremonyOtp
   OTP_TTL = 5.minutes
   OTP_VERIFIER_KEYS = {
     "app" => "APP_EMAIL_OTP_VERIFIER_KEY",
-    "com" => "COM_EMAIL_OTP_VERIFIER_KEY",
     "org" => "ORG_EMAIL_OTP_VERIFIER_KEY",
   }.freeze
 

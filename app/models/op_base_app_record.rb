@@ -7,6 +7,7 @@ class OpBaseAppRecord < ApplicationRecord
   include TokenJsonSanitizable
 
   self.abstract_class = true
+  self.strict_loading_by_default = true
 
   connects_to database: { writing: :op_base_app, reading: :op_base_app_replica }
 end

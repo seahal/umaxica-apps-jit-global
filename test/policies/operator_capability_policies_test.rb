@@ -87,12 +87,14 @@ class OperatorCapabilityPoliciesTest < ActiveSupport::TestCase
     to_self = OperatorCapabilityGrant.new(operator: @operator, capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ)
     iam = OperatorCapabilityGrant.new(operator: @other, capability: OperatorCapabilityGrant::IAM_CAPABILITY_GRANT)
     unknown = OperatorCapabilityGrant.new(operator: @other, capability: "support.*")
+    retired_com = OperatorCapabilityGrant.new(operator: @other, capability: "support.account.read.com")
 
     assert_predicate OperatorCapabilityGrantPolicy.new(held, user: @operator), :create?
     assert_not OperatorCapabilityGrantPolicy.new(not_held, user: @operator).create?
     assert_not OperatorCapabilityGrantPolicy.new(to_self, user: @operator).create?
     assert_not OperatorCapabilityGrantPolicy.new(iam, user: @operator).create?
     assert_not OperatorCapabilityGrantPolicy.new(unknown, user: @operator).create?
+    assert_not OperatorCapabilityGrantPolicy.new(retired_com, user: @operator).create?
   end
 
   test "Tech delegation requires current Tech access and rejects self grant" do

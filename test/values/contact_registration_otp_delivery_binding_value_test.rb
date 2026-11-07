@@ -3,8 +3,8 @@
 require "test_helper"
 
 class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
-  test "Telephone registration accepts exact five-field APP COM and opaque ORG bindings" do
-    %w(app com org).each do |surface|
+  test "Telephone registration accepts exact five-field APP and opaque ORG bindings" do
+    %w(app org).each do |surface|
       tuple = [surface, "credential_registration", "12345678-1234-4000-8000-123456789abc",
                (surface == "org") ? "OrgContact_1234567890" : "Contact_1-", "87654321-4321-4000-b000-cba987654321",]
       value = TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: tuple)
@@ -33,7 +33,7 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
   end
 
   test "Telephone surface and purpose require canonical scalar strings and ORG requires opaque candidate ownership" do
-    { 0 => [nil, "", "dev", "APP", :app, [], {}, 0, false],
+    { 0 => [nil, "", "dev", "com", "visitor", "APP", :app, [], {}, 0, false],
       1 => [nil, "", "sign_up", "sign_in", :credential_registration, [], {}, 0, false], }.each do |index, invalids|
       invalids.each do |invalid|
         tuple = %w(app credential_registration 12345678-1234-4000-8000-123456789abc contact
@@ -109,8 +109,8 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     end
   end
 
-  test "APP and COM candidate references retain one through twenty-one character boundaries" do
-    %w(app com).each do |surface|
+  test "APP candidate references retain one through twenty-one character boundaries" do
+    %w(app).each do |surface|
       ["a", "aa", "a" * 20, "a" * 21].each do |reference|
         value = TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(
           otp_binding: [surface, "credential_registration", "12345678-1234-4000-8000-123456789abc",
@@ -138,7 +138,7 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
      0, 1, [], {}, false,].each do |invalid|
       assert_raises(ArgumentError) do
         TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(
-          otp_binding: ["com", "credential_registration", "12345678-1234-4000-8000-123456789abc", "contact", invalid],
+          otp_binding: ["app", "credential_registration", "12345678-1234-4000-8000-123456789abc", "contact", invalid],
         )
       end
       assert_raises(ArgumentError) do

@@ -17,7 +17,7 @@ module EnforcementIdentifierDigest
   CURRENT_DIGEST_VERSION = 1
   CURRENT_NORMALIZATION_VERSION = 1
 
-  REALMS = %w(app com org).freeze
+  REALMS = %w(app org).freeze
 
   def normalize_email(value)
     JitUtilsEmailValidator.normalize(value)

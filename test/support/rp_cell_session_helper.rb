@@ -52,18 +52,7 @@ module RpCellSessionHelper
     grant = grant_class.find_by!(public_id: payload.fetch("sid"))
     now = record_class.database_now
     auth_time = now.to_i - 1
-    grant.update!(
-      oidc_auth_time: Time.at(auth_time).utc,
-      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
-      oidc_amr: JSON.generate(["passkey"]),
-    )
-    commit_class.create!(
-      grant: grant,
-      root_token: root_token,
-      context_ref: PublicId.generate,
-      verified_method: "passkey",
-      committed_at: Time.at(auth_time).utc,
-    )
+    commit_owner_step_up!(grant:, root_token:, commit_class:, auth_time:)
     access_token = AuthenticationTokenService.encode(
       actor,
       host: URI.parse(client.redirect_uris.first).host,
@@ -89,6 +78,21 @@ module RpCellSessionHelper
   end
 
   private
+
+  def commit_owner_step_up!(grant:, root_token:, commit_class:, auth_time:)
+    grant.update!(
+      oidc_auth_time: Time.at(auth_time).utc,
+      oidc_acr: StepUpEvidenceResolver::STEP_UP_ACR,
+      oidc_amr: JSON.generate(["passkey"]),
+    )
+    commit_class.create!(
+      grant: grant,
+      root_token: root_token,
+      context_ref: PublicId.generate,
+      verified_method: "passkey",
+      committed_at: Time.at(auth_time).utc,
+    )
+  end
 
   def rp_cell_test_token_response(client_id, actor:, root_token:)
     client = OidcClientRegistry.find!(client_id)
